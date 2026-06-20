@@ -12,6 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../../public');
 const port = Number(process.env.PORT || 5173);
 const activeLiveSessions = new Map();
+const serverRunId = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+const realEntityId = process.env.CARRY_REAL_ENTITY_ID || `patient_real_sam_altman_${serverRunId}`;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -60,7 +62,7 @@ async function handleLive(req, res, url) {
     ? (url.searchParams.get('scenario') === 'visit1' ? 'visit1' : 'visit2')
     : 'real_websocket';
   const patientName = sourceMode === 'websocket' ? 'Sam Altman' : 'Anaya Mehta';
-  const entityId = sourceMode === 'websocket' ? 'patient_real_sam_altman' : 'patient_demo_001';
+  const entityId = sourceMode === 'websocket' ? realEntityId : 'patient_demo_001';
   const carry = new CarryBackend({ profession: 'doctor' });
   const minChunks = carry.config.app.processing?.min_new_chunks_for_incremental_pass || 4;
   const llm = {
@@ -89,6 +91,7 @@ async function handleLive(req, res, url) {
     websocket: sourceMode === 'websocket' ? {
       backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
       endPolicy: 'explicit_button_only',
+      entityId,
     } : null,
   });
 
@@ -322,6 +325,7 @@ function runtimeMode() {
     transcriptSource,
     backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
     endPolicy: transcriptSource === 'websocket' ? 'explicit_button_only' : 'simulator_auto_end',
+    realEntityId,
   };
 }
 

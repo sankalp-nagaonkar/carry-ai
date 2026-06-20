@@ -38,13 +38,13 @@ async function init() {
 
 async function loadRuntimeMode() {
   const mode = await fetch('/api/mode').then((r) => r.json()).catch(() => null);
-  applyRuntimeMode(mode?.transcriptSource === 'websocket' ? 'websocket' : 'simulator');
+  applyRuntimeMode(mode?.transcriptSource === 'websocket' ? 'websocket' : 'simulator', mode);
 }
 
-function applyRuntimeMode(source) {
+function applyRuntimeMode(source, mode = {}) {
   state.transcriptSource = source === 'websocket' ? 'websocket' : 'simulator';
   const isReal = state.transcriptSource === 'websocket';
-  state.patient = isReal ? REAL_PATIENT : PATIENT;
+  state.patient = isReal ? { ...REAL_PATIENT, id: mode?.realEntityId || REAL_PATIENT.id } : PATIENT;
   state.appointments = isReal ? REAL_APPOINTMENTS : OTHER_APPOINTMENTS;
   document.body.dataset.transcriptSource = state.transcriptSource;
   document.title = isReal ? 'Carry Real Clinical Transcript' : 'Carry Clinical Co-Pilot';
@@ -53,8 +53,8 @@ function applyRuntimeMode(source) {
     ? 'Real transcript input. Clinician approves. End visit manually.'
     : 'AI prepares. Clinician approves. No automatic actions.';
   $('#scenario-picker')?.toggleAttribute('hidden', isReal);
-  $('#reset-demo').textContent = isReal ? 'Reset Sam record' : 'Reset record';
-  $$('.launch-visit').forEach((b) => { b.textContent = isReal ? 'Begin real visit' : 'Begin next visit'; });
+  $('#reset-demo').textContent = isReal ? 'Start new live record' : 'Reset record';
+  $$('.launch-visit').forEach((b) => { b.textContent = isReal ? 'Begin new real visit' : 'Begin next visit'; });
 }
 
 function bindNav() {
@@ -460,8 +460,9 @@ function showNode(id) {
 }
 
 /* ---------------- LIVE VISIT (real backend SSE) ---------------- */
-function startVisit() {
+async function startVisit() {
   if (state.running) return;
+  if (state.transcriptSource === 'websocket') await clearCurrentRecord({ stayOnToday: true });
   resetVisit();
   go('visit');
   state.running = true;
@@ -870,7 +871,7 @@ async function finishVisit(source, payload) {
   setLive('done', 'Visit complete');
   setProcessState('Visit complete');
   stopProcessTimer();
-  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin real visit' : 'Begin next visit'; });
+  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin new real visit' : 'Begin next visit'; });
   $('#end-visit').hidden = true;
   $('#end-visit').disabled = false;
   syncScenarioButtons();
@@ -889,11 +890,15 @@ function setLive(stateName, label) {
 
 async function resetDemo() {
   if (state.running) return;
+  await clearCurrentRecord();
+}
+
+async function clearCurrentRecord({ stayOnToday = false } = {}) {
   await fetch(`/api/reset?entityId=${entityId()}`).catch(() => {});
   state.newestSession = null;
   $('#update-list').innerHTML = '<li class="update-empty">Updates from visits appear here as Carry understands them.</li>';
   await refresh();
-  go('today');
+  if (!stayOnToday) go('today');
 }
 
 /* ---------------- utils ---------------- */

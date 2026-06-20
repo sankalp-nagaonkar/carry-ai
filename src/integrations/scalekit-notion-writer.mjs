@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { ScalekitClient } from '@scalekit-sdk/node';
 
 export class ScalekitNotionWriter {
@@ -15,25 +17,92 @@ export class ScalekitNotionWriter {
     this.parentPageId = config.profession.tools?.notion?.parent_page_id;
   }
 
-  async createDoctorVisitPage({ sessionId, output }) {
+  async createDoctorVisitPage({ sessionId, output, patientName = 'Patient', visitAt = new Date() }) {
     if (!this.connector) throw new Error('Missing Notion connection name env');
     if (!this.parentPageId) throw new Error('Missing doctor Notion parent_page_id in config');
 
-    const title = `Carry Doctor Visit Draft - ${new Date().toISOString().slice(0, 10)} - ${sessionId.slice(0, 8)}`;
-    const blocks = doctorOutputToBlocks(output);
+    const patientPage = await this.getOrCreatePatientPage(patientName);
+    const title = `${formatDateTime(visitAt)} Visit Note`;
+    const markdown = doctorOutputToMarkdown({ output, sessionId, patientName, visitAt });
+    const result = await this.createNotionPage({
+      parentPageId: patientPage.id,
+      title,
+      blocks: markdownToParagraphBlocks(markdown),
+    });
+    return { ...result, patientPage, markdownTitle: title };
+  }
+
+  async getOrCreatePatientPage(patientName) {
+    const registry = this.readPatientRegistry();
+    const registryKey = `${this.parentPageId}:${patientName.toLowerCase()}`;
+    if (registry[registryKey]) return { id: registry[registryKey], title: patientName, source: 'local_registry' };
+
+    const found = await this.findPatientPage(patientName).catch(() => null);
+    if (found?.id) {
+      registry[registryKey] = found.id;
+      this.writePatientRegistry(registry);
+      return { ...found, source: 'notion_search' };
+    }
+
+    const created = await this.createNotionPage({
+      parentPageId: this.parentPageId,
+      title: patientName,
+      blocks: [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Carry patient record. Visit notes appear as timestamped subpages.' } }] } }],
+    });
+    registry[registryKey] = created.id;
+    this.writePatientRegistry(registry);
+    return { id: created.id, title: patientName, source: 'created' };
+  }
+
+  async findPatientPage(patientName) {
+    let lastError;
+    for (const toolName of ['notion_search', 'notion_page_search']) {
+      try {
+        const result = await this.client.actions.executeTool({
+          toolName,
+          identifier: this.identifier,
+          connector: this.connector,
+          toolInput: { query: patientName, page_size: 10 },
+        });
+        const candidates = extractNotionSearchResults(result.data);
+        const found = candidates.find((p) => p.title?.trim().toLowerCase() === patientName.trim().toLowerCase() && p.id);
+        if (found) return found;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError) throw lastError;
+    return null;
+  }
+
+  async createNotionPage({ parentPageId, title, blocks }) {
     const result = await this.client.actions.executeTool({
       toolName: 'notion_page_create',
       identifier: this.identifier,
       connector: this.connector,
       toolInput: {
-        parent_page_id: this.parentPageId,
+        parent_page_id: parentPageId,
         properties: {
           title: { title: [{ text: { content: title } }] },
         },
         child_blocks: blocks,
       },
     });
-    return result.data;
+    return normalizeCreatedPage(result.data);
+  }
+
+  registryPath() {
+    return path.join(this.config.rootDir || process.cwd(), 'data', 'notion-patient-pages.json');
+  }
+
+  readPatientRegistry() {
+    try { return JSON.parse(fs.readFileSync(this.registryPath(), 'utf8')); } catch { return {}; }
+  }
+
+  writePatientRegistry(registry) {
+    const file = this.registryPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(registry, null, 2));
   }
 
   async createLawyerMatterPage({ sessionId, output }) {
@@ -56,6 +125,152 @@ export class ScalekitNotionWriter {
     });
     return result.data;
   }
+}
+
+function extractNotionSearchResults(data) {
+  const raw = data?.results || data?.pages || data?.objects || (Array.isArray(data) ? data : []);
+  return raw.map((page) => ({ id: page.id || page.page_id, title: notionTitle(page) })).filter((p) => p.id || p.title);
+}
+
+function notionTitle(page) {
+  const propTitle = page.properties?.title?.title || page.properties?.Name?.title || page.properties?.name?.title;
+  if (Array.isArray(propTitle)) return propTitle.map((x) => x.plain_text || x.text?.content || '').join('');
+  return page.title || page.name || page.properties?.title || '';
+}
+
+function normalizeCreatedPage(data) {
+  return {
+    ...(data || {}),
+    id: data?.id || data?.page_id || data?.page?.id,
+    url: data?.url || data?.page?.url,
+  };
+}
+
+function formatDateTime(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function markdownToParagraphBlocks(markdown) {
+  const chunks = chunkString(markdown, 1800);
+  return chunks.map((content) => ({
+    object: 'block',
+    type: 'paragraph',
+    paragraph: { rich_text: [{ type: 'text', text: { content } }] },
+  }));
+}
+
+function chunkString(text, size) {
+  const src = String(text || '');
+  const out = [];
+  for (let i = 0; i < src.length; i += size) out.push(src.slice(i, i + size));
+  return out.length ? out : [''];
+}
+
+function listText(value) {
+  if (!value) return '';
+  const arr = Array.isArray(value) ? value : [value];
+  return arr.map(summaryText).filter(Boolean).join('; ');
+}
+
+function summaryText(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(summaryText).filter(Boolean).join(', ');
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([, v]) => v !== null && v !== undefined && v !== '')
+      .map(([k, v]) => {
+        const text = summaryText(v);
+        return ['value', 'draft', 'description', 'details', 'medication', 'reason', 'evidence'].includes(k) ? text : `${humanize(k)}: ${text}`;
+      })
+      .filter(Boolean)
+      .join('; ');
+  }
+  return String(value);
+}
+
+function humanize(key) {
+  return String(key || '').replace(/_/g, ' ');
+}
+
+function doctorOutputToMarkdown({ output, sessionId, patientName, visitAt }) {
+  const soap = output.soap_note || {};
+  const facts = output.clinical_facts || {};
+  const meds = output.medication_decision_tracking || {};
+  const safety = output.safety_flags || {};
+  const follow = output.follow_up_plan || {};
+  const codes = output.icd10_suggestions || [];
+  const missing = output.missing_information || [];
+
+  return [
+    `# Carry Visit Note`,
+    ``,
+    `- Patient: ${patientName}`,
+    `- Visit time: ${formatDateTime(visitAt)}`,
+    `- Session: ${sessionId}`,
+    `- Status: ${output.status || 'draft_requires_clinician_review'}`,
+    `- Review: clinician review required`,
+    ``,
+    `## SOAP Note`,
+    ``,
+    `### Subjective`,
+    summaryText(soap.subjective) || 'Not discussed in transcript',
+    ``,
+    `### Objective`,
+    summaryText(soap.objective) || 'Not discussed in transcript',
+    ``,
+    `### Assessment`,
+    summaryText(soap.assessment) || 'Draft assessment requires clinician review',
+    ``,
+    `### Plan`,
+    summaryText(soap.plan) || 'Not discussed in transcript',
+    ``,
+    `## Clinical Facts`,
+    ``,
+    `- Chief complaint: ${summaryText(facts.chief_complaint) || 'Not discussed in transcript'}`,
+    `- History: ${summaryText(facts.history_of_present_illness) || 'Not discussed in transcript'}`,
+    `- Positive symptoms: ${listText(facts.positive_symptoms) || 'None captured'}`,
+    `- Negative symptoms: ${listText(facts.negative_symptoms) || 'None captured'}`,
+    `- Allergies: ${summaryText(facts.allergies) || 'Not discussed in transcript'}`,
+    ``,
+    `## Medication Decision Tracking`,
+    ``,
+    `- Initially proposed: ${listText(meds.initially_proposed) || 'None'}`,
+    `- Allergy or contraindication discovered: ${listText(meds.allergy_or_contraindication_discovered) || 'None'}`,
+    `- Cancelled or avoided: ${listText(meds.cancelled_or_avoided) || 'None'}`,
+    `- Final stated plan: ${listText(meds.final_stated_plan) || 'None'}`,
+    ``,
+    `## Safety`,
+    ``,
+    `- Present: ${listText(safety.red_flags_present) || 'None captured'}`,
+    `- Denied: ${listText(safety.red_flags_denied) || 'None captured'}`,
+    `- Not assessed: ${listText(safety.red_flags_not_assessed) || 'None captured'}`,
+    `- Note: ${safety.safety_note || 'None'}`,
+    ``,
+    `## Missing Information`,
+    ``,
+    missing.length ? missing.map((x) => `- ${x.field || 'Field'}: ${x.reason || x.importance || ''}`).join('\n') : '- None captured',
+    ``,
+    `## ICD-10 Suggestions`,
+    ``,
+    codes.length ? codes.map((x) => `- ${x.code || ''} ${x.description || ''} (${x.confidence ?? 'review'})`).join('\n') : '- None suggested',
+    ``,
+    `## Follow-up Plan`,
+    ``,
+    `- Needed: ${follow.needed === false ? 'No' : 'Yes or review'}`,
+    `- Timeframe: ${follow.timeframe_text || 'Not discussed in transcript'}`,
+    `- Reason: ${follow.reason || 'Not discussed in transcript'}`,
+    ``,
+    `## Patient Summary Draft`,
+    ``,
+    output.patient_summary?.draft || 'No patient summary drafted',
+    ``,
+    `---`,
+    `Generated by Carry. Clinician review required before relying on this note.`,
+  ].join('\n');
 }
 
 function doctorOutputToBlocks(output) {

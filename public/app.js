@@ -486,7 +486,7 @@ function startVisit() {
   source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); markInsightUpdated(); });
   source.addEventListener('final_started', () => { setLive('thinking', 'Drafting note'); setProcessState('Drafting final'); addActivity('Final drafting started', 'Carry is preparing the review draft.', 'tag-warn'); });
   source.addEventListener('final', (e) => { onFinal(parse(e).output); markInsightUpdated('Draft ready'); });
-  source.addEventListener('notion_started', () => addAction('Notion sync', 'Preparing visit note for sync.', 'tag'));
+  source.addEventListener('notion_started', () => addAction('Notion sync', 'Creating the patient page and timestamped markdown visit note.', 'tag'));
   source.addEventListener('notion', (e) => onNotion(parse(e)));
   source.addEventListener('done', (e) => finishVisit(source, parse(e)));
   source.addEventListener('error', (e) => {
@@ -564,7 +564,6 @@ function renderProcessing() {
   $('#process-state').textContent = state.processState || 'Idle';
   $('#process-heard').textContent = `Last heard: ${state.lastHeardAt ? relTime(state.lastHeardAt) : 'none'}`;
   $('#process-context').textContent = `Context: ${Math.min(state.chunksSinceInsight, state.minChunks)} / ${state.minChunks} turns`;
-  $('#process-insight').textContent = `Insight: ${state.lastInsightAt ? relTime(state.lastInsightAt) : 'not yet'}`;
   $('#intel-updated').textContent = state.lastInsightAt ? `Updated ${relTime(state.lastInsightAt)}` : (state.running ? 'Collecting context' : 'Not started');
   const pct = state.minChunks ? Math.min(100, Math.round((state.chunksSinceInsight / state.minChunks) * 100)) : 0;
   $('#process-bar-fill').style.width = thinking ? '100%' : `${pct}%`;
@@ -856,8 +855,8 @@ function reviewItem(title, status, body, full) {
 }
 
 function onNotion(data) {
-  if (data.ok && data.page?.url) addAction('Notion synced', `Visit note created. ${data.page.url}`, 'tag-good');
-  else if (data.ok) addAction('Notion synced', 'Visit note created in Notion.', 'tag-good');
+  if (data.ok && data.page?.url) addAction('Notion synced', `Markdown visit note created under the patient page. ${data.page.url}`, 'tag-good', 'Done');
+  else if (data.ok) addAction('Notion synced', 'Markdown visit note created under the patient page.', 'tag-good', 'Done');
   else addAction('Notion sync', `Needs review: ${data.error || 'unknown error'}`, 'tag-warn');
 }
 

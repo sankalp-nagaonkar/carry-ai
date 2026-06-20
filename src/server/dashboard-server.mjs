@@ -59,6 +59,7 @@ async function handleLive(req, res, url) {
   const scenario = sourceMode === 'simulator'
     ? (url.searchParams.get('scenario') === 'visit1' ? 'visit1' : 'visit2')
     : 'real_websocket';
+  const patientName = sourceMode === 'websocket' ? 'Sam Altman' : 'Anaya Mehta';
   const entityId = sourceMode === 'websocket' ? 'patient_real_sam_altman' : 'patient_demo_001';
   const carry = new CarryBackend({ profession: 'doctor' });
   const minChunks = carry.config.app.processing?.min_new_chunks_for_incremental_pass || 4;
@@ -72,7 +73,7 @@ async function handleLive(req, res, url) {
     entityType: 'patient',
     entityId,
     source: sourceMode === 'websocket' ? 'poc_global_live_transcript_websocket' : 'dashboard_live_simulator',
-    metadata: { encounter_type: 'outpatient_visit', demo: true, scenario, source_mode: sourceMode, patient_name: sourceMode === 'websocket' ? 'Sam Altman' : 'Anaya Mehta' },
+    metadata: { encounter_type: 'outpatient_visit', demo: true, scenario, source_mode: sourceMode, patient_name: patientName },
   });
 
   emit('session', {
@@ -141,7 +142,7 @@ async function handleLive(req, res, url) {
     emit('notion_started', {});
     try {
       const writer = new ScalekitNotionWriter(carry.config);
-      const page = await writer.createDoctorVisitPage({ sessionId: session.session_id, output: finalOutput });
+      const page = await writer.createDoctorVisitPage({ sessionId: session.session_id, output: finalOutput, patientName, visitAt: new Date() });
       emit('notion', { ok: true, page });
     } catch (error) {
       emit('notion', { ok: false, error: error.message || String(error) });

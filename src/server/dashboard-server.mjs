@@ -7,6 +7,7 @@ import { CarryBackend } from '../core/carry-backend.mjs';
 import { getDoctorScenario, streamChunks } from '../simulators/doctor-transcript-simulator.mjs';
 import { ScalekitNotionWriter } from '../integrations/scalekit-notion-writer.mjs';
 import { LiveTranscriptWsConsumer } from '../transcripts/live-transcript-ws-consumer.mjs';
+import { shouldKeepSegmentAfterCutoff } from '../transcripts/transcript-timestamp-filter.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../../public');
@@ -63,6 +64,8 @@ async function handleLive(req, res, url) {
     : 'real_websocket';
   const patientName = sourceMode === 'websocket' ? 'Sam Altman' : 'Anaya Mehta';
   const entityId = sourceMode === 'websocket' ? realEntityId : 'patient_demo_001';
+  const visitStartedAt = new Date();
+  const visitStartCutoffMs = visitStartedAt.getTime();
   const carry = new CarryBackend({ profession: 'doctor' });
   const minChunks = carry.config.app.processing?.min_new_chunks_for_incremental_pass || 4;
   const llm = {
@@ -92,6 +95,7 @@ async function handleLive(req, res, url) {
       backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
       endPolicy: 'explicit_button_only',
       entityId,
+      visitStartedAtUtc: visitStartedAt.toISOString(),
     } : null,
   });
 
@@ -158,11 +162,11 @@ async function handleLive(req, res, url) {
 
   try {
     if (sourceMode === 'websocket') {
-      const transcriptResult = await consumeRealTranscript({ sessionId: session.session_id, req, emit, ingestAndMaybeProcess, url, isClosed: () => closed });
+      const transcriptResult = await consumeRealTranscript({ sessionId: session.session_id, req, emit, ingestAndMaybeProcess, url, isClosed: () => closed, visitStartCutoffMs, visitStartedAt });
       if (closed) return;
       emit('websocket_complete', transcriptResult);
       if (!transcriptResult.chunks) {
-        throw new Error(`No live transcript chunks received from WebSocket before ${transcriptResult.reason}`);
+        throw new Error(`No live transcript chunks received after ${transcriptResult.visitStartedAtUtc || 'visit start'} before ${transcriptResult.reason}`);
       }
     } else {
       await streamChunks(getDoctorScenario(scenario), ingestAndMaybeProcess, { delayMs });
@@ -191,13 +195,15 @@ async function handleLive(req, res, url) {
   }
 }
 
-async function consumeRealTranscript({ sessionId, req, emit, ingestAndMaybeProcess, url, isClosed }) {
+async function consumeRealTranscript({ sessionId, req, emit, ingestAndMaybeProcess, url, isClosed, visitStartCutoffMs, visitStartedAt }) {
   const backendUrl = url.searchParams.get('backendUrl') || process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app';
   const consumer = new LiveTranscriptWsConsumer({ backendUrl });
   const controller = new AbortController();
   const seen = new Map();
   const speakerAliases = new Map();
   let chunks = 0;
+  let skippedBeforeStart = 0;
+  let skippedMissingTimestamp = 0;
   let done = false;
   let resolveDone;
   const donePromise = new Promise((resolve) => { resolveDone = resolve; });
@@ -244,13 +250,36 @@ async function consumeRealTranscript({ sessionId, req, emit, ingestAndMaybeProce
       }
 
       const segments = event.segments || [];
+      const visibleSegments = [];
+      let eventSkippedBeforeStart = 0;
+      let eventSkippedMissingTimestamp = 0;
+
+      for (const segment of segments) {
+        const decision = shouldKeepSegmentAfterCutoff({ segment, event, cutoffMs: visitStartCutoffMs });
+        if (decision.keep) {
+          visibleSegments.push({ segment, decision });
+        } else if (decision.reason === 'missing_timestamp') {
+          skippedMissingTimestamp++;
+          eventSkippedMissingTimestamp++;
+        } else {
+          skippedBeforeStart++;
+          eventSkippedBeforeStart++;
+        }
+      }
+
       emit('websocket_status', {
         status: 'transcript_updated',
-        segmentCount: segments.length,
-        speakers: [...new Set(segments.map(rawSpeakerLabel).filter(Boolean))],
+        segmentCount: visibleSegments.length,
+        rawSegmentCount: segments.length,
+        skippedBeforeStart: eventSkippedBeforeStart,
+        skippedMissingTimestamp: eventSkippedMissingTimestamp,
+        totalSkippedBeforeStart: skippedBeforeStart,
+        totalSkippedMissingTimestamp: skippedMissingTimestamp,
+        visitStartedAtUtc: visitStartedAt.toISOString(),
+        speakers: [...new Set(visibleSegments.map(({ segment }) => rawSpeakerLabel(segment)).filter(Boolean))],
       });
 
-      for (const [index, segment] of segments.entries()) {
+      for (const [index, { segment, decision }] of visibleSegments.entries()) {
         const text = String(segment?.text || '').trim();
         if (!text) continue;
         const segmentId = segment.id || segment.segment_id || segment.transcript_segment_id || `${event.id || 'event'}_${index}`;
@@ -267,7 +296,7 @@ async function consumeRealTranscript({ sessionId, req, emit, ingestAndMaybeProce
           endMs: segment.end_ms ?? segment.endMs ?? segment.end_time_ms ?? null,
           confidence: segment.confidence ?? null,
           isFinal: segment.is_final ?? segment.final ?? true,
-          receivedAt: new Date().toISOString(),
+          receivedAt: new Date(decision.timestampMs).toISOString(),
         });
       }
     },
@@ -275,10 +304,10 @@ async function consumeRealTranscript({ sessionId, req, emit, ingestAndMaybeProce
     if (!done) emit('websocket_status', { status: 'error', error: error.message || String(error) });
   });
 
-  emit('websocket_status', { status: 'connecting', backendUrl, endPolicy: 'explicit_button_only' });
+  emit('websocket_status', { status: 'connecting', backendUrl, endPolicy: 'explicit_button_only', visitStartedAtUtc: visitStartedAt.toISOString() });
   const reason = await donePromise;
   await run.catch(() => {});
-  return { reason, chunks };
+  return { reason, chunks, skippedBeforeStart, skippedMissingTimestamp, visitStartedAtUtc: visitStartedAt.toISOString() };
 }
 
 function rawSpeakerLabel(segment = {}) {

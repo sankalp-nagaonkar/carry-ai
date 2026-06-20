@@ -22,12 +22,14 @@ export class ScalekitNotionWriter {
     if (!this.parentPageId) throw new Error('Missing doctor Notion parent_page_id in config');
 
     const patientPage = await this.getOrCreatePatientPage(patientName);
-    const title = `${formatDateTime(visitAt)} Visit Note`;
+    if (!patientPage?.id) throw new Error(`Could not resolve Notion patient page for ${patientName}`);
+
+    const title = `${formatHumanDateTime(visitAt)} Visit Note`;
     const markdown = doctorOutputToMarkdown({ output, sessionId, patientName, visitAt });
     const result = await this.createNotionPage({
       parentPageId: patientPage.id,
       title,
-      blocks: markdownToParagraphBlocks(markdown),
+      blocks: markdownToNotionBlocks(markdown),
     });
     return { ...result, patientPage, markdownTitle: title };
   }
@@ -35,11 +37,11 @@ export class ScalekitNotionWriter {
   async getOrCreatePatientPage(patientName) {
     const registry = this.readPatientRegistry();
     const registryKey = `${this.parentPageId}:${patientName.toLowerCase()}`;
-    if (registry[registryKey]) return { id: registry[registryKey], title: patientName, source: 'local_registry' };
+    if (registry[registryKey]) return { id: normalizeNotionId(registry[registryKey]), title: patientName, source: 'local_registry' };
 
     const found = await this.findPatientPage(patientName).catch(() => null);
     if (found?.id) {
-      registry[registryKey] = found.id;
+      registry[registryKey] = normalizeNotionId(found.id);
       this.writePatientRegistry(registry);
       return { ...found, source: 'notion_search' };
     }
@@ -49,9 +51,10 @@ export class ScalekitNotionWriter {
       title: patientName,
       blocks: [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Carry patient record. Visit notes appear as timestamped subpages.' } }] } }],
     });
-    registry[registryKey] = created.id;
+    if (!created.id) throw new Error(`Notion patient page was created but no page id was returned for ${patientName}`);
+    registry[registryKey] = normalizeNotionId(created.id);
     this.writePatientRegistry(registry);
-    return { id: created.id, title: patientName, source: 'created' };
+    return { id: normalizeNotionId(created.id), title: patientName, source: 'created' };
   }
 
   async findPatientPage(patientName) {
@@ -76,12 +79,13 @@ export class ScalekitNotionWriter {
   }
 
   async createNotionPage({ parentPageId, title, blocks }) {
+    if (!parentPageId) throw new Error(`Cannot create Notion page "${title}" without a parent page id`);
     const result = await this.client.actions.executeTool({
       toolName: 'notion_page_create',
       identifier: this.identifier,
       connector: this.connector,
       toolInput: {
-        parent_page_id: parentPageId,
+        parent_page_id: normalizeNotionId(parentPageId),
         properties: {
           title: { title: [{ text: { content: title } }] },
         },
@@ -128,8 +132,8 @@ export class ScalekitNotionWriter {
 }
 
 function extractNotionSearchResults(data) {
-  const raw = data?.results || data?.pages || data?.objects || (Array.isArray(data) ? data : []);
-  return raw.map((page) => ({ id: page.id || page.page_id, title: notionTitle(page) })).filter((p) => p.id || p.title);
+  const raw = data?.results || data?.pages || data?.objects || data?.data?.results || data?.result?.results || (Array.isArray(data) ? data : []);
+  return raw.map((page) => ({ id: extractPageId(page), title: notionTitle(page) })).filter((p) => p.id || p.title);
 }
 
 function notionTitle(page) {
@@ -139,26 +143,78 @@ function notionTitle(page) {
 }
 
 function normalizeCreatedPage(data) {
+  const id = extractPageId(data);
+  const url = data?.url || data?.page?.url || data?.data?.url || data?.result?.url;
   return {
     ...(data || {}),
-    id: data?.id || data?.page_id || data?.page?.id,
-    url: data?.url || data?.page?.url,
+    id: id ? normalizeNotionId(id) : undefined,
+    url,
   };
 }
 
-function formatDateTime(value) {
-  const d = value instanceof Date ? value : new Date(value);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function extractPageId(data, depth = 0) {
+  if (!data || depth > 4) return null;
+  if (typeof data === 'string' && /^[0-9a-f-]{32,36}$/i.test(data)) return data;
+  if (typeof data !== 'object') return null;
+  const direct = data.id || data.page_id || data.pageId;
+  if (direct) return direct;
+  for (const key of ['page', 'data', 'result', 'object']) {
+    const found = extractPageId(data[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
 }
 
-function markdownToParagraphBlocks(markdown) {
-  const chunks = chunkString(markdown, 1800);
-  return chunks.map((content) => ({
+function normalizeNotionId(id) {
+  return String(id || '').trim();
+}
+
+function formatHumanDateTime(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(d);
+}
+
+function markdownToNotionBlocks(markdown) {
+  const lines = String(markdown || '').split('\n');
+  const blocks = [];
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    const text = paragraph.join('\n').trim();
+    paragraph = [];
+    if (!text) return;
+    blocks.push(...chunkString(text, 1800).map((content) => notionBlock('paragraph', content)));
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) { flushParagraph(); continue; }
+    if (line.trim() === '---') { flushParagraph(); blocks.push({ object: 'block', type: 'divider', divider: {} }); continue; }
+
+    const h3 = line.match(/^###\s+(.+)/);
+    const h2 = line.match(/^##\s+(.+)/);
+    const h1 = line.match(/^#\s+(.+)/);
+    const bullet = line.match(/^[-*]\s+(.+)/);
+
+    if (h3) { flushParagraph(); blocks.push(notionBlock('heading_3', h3[1])); continue; }
+    if (h2) { flushParagraph(); blocks.push(notionBlock('heading_2', h2[1])); continue; }
+    if (h1) { flushParagraph(); blocks.push(notionBlock('heading_1', h1[1])); continue; }
+    if (bullet) { flushParagraph(); blocks.push(notionBlock('bulleted_list_item', bullet[1])); continue; }
+
+    paragraph.push(line);
+  }
+  flushParagraph();
+  return blocks.slice(0, 90);
+}
+
+function notionBlock(type, content) {
+  return {
     object: 'block',
-    type: 'paragraph',
-    paragraph: { rich_text: [{ type: 'text', text: { content } }] },
-  }));
+    type,
+    [type]: { rich_text: [{ type: 'text', text: { content: String(content || '').slice(0, 1900) } }] },
+  };
 }
 
 function chunkString(text, size) {
@@ -209,7 +265,7 @@ function doctorOutputToMarkdown({ output, sessionId, patientName, visitAt }) {
     `# Carry Visit Note`,
     ``,
     `- Patient: ${patientName}`,
-    `- Visit time: ${formatDateTime(visitAt)}`,
+    `- Visit time: ${formatHumanDateTime(visitAt)}`,
     `- Session: ${sessionId}`,
     `- Status: ${output.status || 'draft_requires_clinician_review'}`,
     `- Review: clinician review required`,

@@ -156,7 +156,7 @@ Each semantic color also has a `*Wash` pale-fill variant for pill backgrounds.
 ### Demo mode (must-have for pitching)
 - A scenario picker: Visit 1 (first consult, penicillin allergy + cetirizine captured) and Visit 2 (the allergy catch: amoxicillin proposed, switched to azithromycin).
 - A **Reset record** action that clears everything back to empty so the demo can replay.
-- Configurable chunk pacing (e.g., 1500ms between chunks) so the live screen reads well on stage.
+- Configurable chunk pacing (e.g., 2300ms between chunks) so the live screen reads well on stage.
 
 ---
 

@@ -53,7 +53,7 @@ async function handleLive(req, res, url) {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  const delayMs = Number(url.searchParams.get('delayMs') || process.env.SIM_DELAY_MS || 1500);
+  const delayMs = Number(url.searchParams.get('delayMs') || process.env.SIM_DELAY_MS || 2300);
   const requestedSource = url.searchParams.get('source') || process.env.CARRY_TRANSCRIPT_SOURCE || 'simulator';
   const sourceMode = ['websocket', 'real', 'live'].includes(requestedSource) ? 'websocket' : 'simulator';
   const scenario = sourceMode === 'simulator'

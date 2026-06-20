@@ -84,7 +84,7 @@ Use **Reset matter** (top right) to clear the matter and replay from scratch.
 PORT=8080 npm run live                 # different real doctor port
 PORT=8080 npm run sim                  # different simulated doctor port
 LAWYER_PORT=8081 npm run lawyer:live   # different lawyer port
-SIM_DELAY_MS=2500 npm run sim          # slow simulated doctor conversation pacing
+SIM_DELAY_MS=1800 npm run sim          # override simulated doctor pacing, default is 2300ms
 ```
 
 ## Architecture

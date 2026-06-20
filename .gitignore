@@ -37,3 +37,6 @@ coverage/
 # Temp
 tmp/
 .tmp/
+
+# Deck QA previews (regenerable)
+deck/preview-*.png

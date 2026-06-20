@@ -1,0 +1,23 @@
+{
+  "name": "aiboomi_blr",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "live": "node src/server/dashboard-server.mjs",
+    "doctor:live": "node src/server/dashboard-server.mjs",
+    "scalekit:smoke": "node scripts/scalekit-smoke-test.mjs",
+    "scalekit:auth:notion": "node scripts/scalekit-auth-link.mjs notion"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@scalekit-sdk/node": "^2.6.3",
+    "better-sqlite3": "^12.11.1",
+    "dotenv": "^17.4.2",
+    "js-yaml": "^4.2.0",
+    "openai": "^6.44.0",
+    "uuid": "^14.0.0"
+  }
+}

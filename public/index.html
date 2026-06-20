@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carry Clinical Co-Pilot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="rail">
+        <div class="rail-brand">
+          <span class="rail-logo" aria-hidden="true">C</span>
+          <span class="rail-word">Carry</span>
+        </div>
+
+        <nav class="rail-nav" aria-label="Primary">
+          <button class="rail-link active" data-page="today">
+            <span class="rail-link-label">Today</span>
+            <span class="rail-link-hint">Command center</span>
+          </button>
+          <button class="rail-link" data-page="visit">
+            <span class="rail-link-label">Live Visit</span>
+            <span class="rail-link-hint">Active conversation</span>
+          </button>
+          <button class="rail-link" data-page="profile">
+            <span class="rail-link-label">Patient</span>
+            <span class="rail-link-hint">Longitudinal record</span>
+          </button>
+          <button class="rail-link" data-page="timeline">
+            <span class="rail-link-label">Timeline</span>
+            <span class="rail-link-hint">Clinical history</span>
+          </button>
+          <button class="rail-link" data-page="graph">
+            <span class="rail-link-label">Knowledge Graph</span>
+            <span class="rail-link-hint">Relationships</span>
+          </button>
+        </nav>
+
+        <div class="rail-foot">
+          <p class="rail-foot-title">Doctor Mode</p>
+          <p class="rail-foot-copy">AI prepares. Clinician approves. No automatic actions.</p>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <!-- TODAY -->
+        <section class="view active" id="view-today">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Tuesday clinic</p>
+              <h1>Good morning, Dr. Rao</h1>
+            </div>
+            <div class="head-actions">
+              <div class="scenario-picker" id="scenario-picker" role="group" aria-label="Demo scenario">
+                <span class="scenario-label">Demo</span>
+                <button class="scenario-opt active" data-scenario="visit1">Visit 1</button>
+                <button class="scenario-opt" data-scenario="visit2">Visit 2</button>
+              </div>
+              <button class="btn-ghost" id="reset-demo">Reset record</button>
+              <button class="btn-primary launch-visit">Begin next visit</button>
+            </div>
+          </header>
+
+          <div class="today-grid">
+            <div class="today-main">
+              <section class="briefing" id="briefing">
+                <div class="briefing-head">
+                  <div class="patient-id">
+                    <span class="avatar" id="brief-avatar">AM</span>
+                    <div>
+                      <h2 id="brief-name">Anaya Mehta</h2>
+                      <p class="muted" id="brief-meta">34, she/her · MRN-4821 · 09:30</p>
+                    </div>
+                  </div>
+                  <span class="tag tag-live" id="brief-badge">Next patient</span>
+                </div>
+
+                <p class="briefing-lead" id="brief-lead">Pre-visit briefing, generated from prior visits and current context.</p>
+
+                <div class="carried-strip" id="carried-strip" hidden>
+                  <span class="block-label">Carried forward by Carry</span>
+                  <ul id="carried-list" class="chiplist"></ul>
+                </div>
+
+                <div class="briefing-cols">
+                  <div class="brief-block">
+                    <p class="block-label">Last visit</p>
+                    <p id="brief-last" class="block-body"></p>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Current medications</p>
+                    <ul id="brief-meds" class="chiplist"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Allergies</p>
+                    <ul id="brief-allergies" class="chiplist danger"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Recent symptoms</p>
+                    <ul id="brief-symptoms" class="chiplist"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Unresolved</p>
+                    <ul id="brief-unresolved" class="dotlist"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Suggested agenda</p>
+                    <ol id="brief-agenda" class="agenda"></ol>
+                  </div>
+                </div>
+              </section>
+
+              <section class="schedule">
+                <div class="section-head">
+                  <h3>Today's schedule</h3>
+                  <span class="muted-sm" id="schedule-count"></span>
+                </div>
+                <ul class="appt-list" id="appt-list"></ul>
+              </section>
+            </div>
+
+            <aside class="today-side">
+              <section class="attention">
+                <div class="section-head">
+                  <h3>Needs attention</h3>
+                </div>
+                <ul class="attention-list" id="attention-list"></ul>
+              </section>
+
+              <section class="updates">
+                <div class="section-head">
+                  <h3>Recent updates</h3>
+                </div>
+                <ul class="update-list" id="update-list">
+                  <li class="update-empty">Updates from visits appear here as Carry understands them.</li>
+                </ul>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <!-- LIVE VISIT -->
+        <section class="view" id="view-visit">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Live visit · <span id="visit-patient">Anaya Mehta</span> · <span id="visit-scenario">Visit</span></p>
+              <h1>Conversation</h1>
+            </div>
+            <div class="visit-controls">
+              <span class="live-dot" id="live-dot" data-state="idle"><span></span><em id="live-label">Idle</em></span>
+              <button class="btn-primary launch-visit" id="visit-start">Start conversation</button>
+            </div>
+          </header>
+
+          <div class="visit-grid">
+            <section class="convo">
+              <div class="convo-head">
+                <h3>Live transcript</h3>
+                <span class="muted-sm"><span id="convo-count">0</span> exchanges</span>
+              </div>
+              <div class="convo-stream" id="convo-stream">
+                <p class="convo-empty">Start the conversation to see it unfold. Carry quietly extracts meaning as the doctor and patient speak.</p>
+              </div>
+            </section>
+
+            <section class="intel">
+              <div class="intel-head">
+                <h3>Clinical intelligence</h3>
+                <span class="muted-sm">Updated live</span>
+              </div>
+
+              <div class="intel-scroll" id="intel-scroll">
+                <div class="intel-card" id="card-soap">
+                  <div class="intel-card-head">
+                    <p class="block-label">Note draft</p>
+                    <span class="tag" id="soap-progress">Listening</span>
+                  </div>
+                  <dl class="soap-grid" id="soap-grid">
+                    <div><dt>S</dt><dd id="soap-s" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>O</dt><dd id="soap-o" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>A</dt><dd id="soap-a" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>P</dt><dd id="soap-p" class="pending">Awaiting conversation</dd></div>
+                  </dl>
+                </div>
+
+                <div class="intel-card">
+                  <div class="intel-card-head">
+                    <p class="block-label">Symptoms</p>
+                  </div>
+                  <ul class="live-list" id="live-symptoms"><li class="live-empty">None detected yet</li></ul>
+                </div>
+
+                <div class="intel-card">
+                  <div class="intel-card-head">
+                    <p class="block-label">Medications</p>
+                  </div>
+                  <ul class="live-list" id="live-meds"><li class="live-empty">None mentioned yet</li></ul>
+                </div>
+
+                <div class="intel-card" id="card-safety">
+                  <div class="intel-card-head">
+                    <p class="block-label">Safety checks</p>
+                  </div>
+                  <ul class="live-list" id="live-safety"><li class="live-empty">No conflicts detected</li></ul>
+                </div>
+
+                <div class="intel-card">
+                  <div class="intel-card-head">
+                    <p class="block-label">Missing information</p>
+                  </div>
+                  <ul class="live-list" id="live-missing"><li class="live-empty">Note looks complete so far</li></ul>
+                </div>
+              </div>
+            </section>
+
+            <aside class="sidebar-actions">
+              <div class="intel-head">
+                <h3>Drafted actions</h3>
+              </div>
+              <div class="action-stack" id="action-stack">
+                <p class="live-empty">Calendar, lab, and sync drafts appear here as the visit progresses.</p>
+              </div>
+            </aside>
+          </div>
+
+          <!-- Review drawer -->
+          <section class="review" id="review" hidden>
+            <div class="review-head">
+              <div>
+                <h2>Visit ready for review</h2>
+                <p class="muted">AI prepared this draft. Approve to commit. Nothing is sent automatically.</p>
+              </div>
+              <button class="btn-primary" id="approve-all">Approve and sync</button>
+            </div>
+            <div class="review-grid" id="review-grid"></div>
+          </section>
+        </section>
+
+        <!-- PATIENT PROFILE -->
+        <section class="view" id="view-profile">
+          <header class="view-head">
+            <div class="patient-id large">
+              <span class="avatar lg">AM</span>
+              <div>
+                <h1>Anaya Mehta</h1>
+                <p class="muted">34, she/her · MRN-4821 · Primary: Dr. Rao</p>
+              </div>
+            </div>
+            <span class="tag tag-danger" id="profile-risk">Penicillin allergy</span>
+          </header>
+
+          <div class="profile-grid" id="profile-grid"></div>
+        </section>
+
+        <!-- TIMELINE -->
+        <section class="view" id="view-timeline">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Anaya Mehta</p>
+              <h1>Clinical timeline</h1>
+            </div>
+          </header>
+          <div class="timeline" id="timeline"></div>
+        </section>
+
+        <!-- KNOWLEDGE GRAPH -->
+        <section class="view" id="view-graph">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Anaya Mehta</p>
+              <h1>Knowledge graph</h1>
+            </div>
+            <span class="muted-sm" id="graph-status">Baseline understanding</span>
+          </header>
+          <div class="graph-wrap">
+            <svg class="graph-canvas" id="graph-canvas" viewBox="0 0 1000 680" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Patient knowledge graph"></svg>
+            <aside class="graph-detail" id="graph-detail">
+              <p class="block-label">Node detail</p>
+              <p class="muted graph-detail-empty">Select any node to trace where the information came from.</p>
+            </aside>
+            <div class="graph-legend" id="graph-legend"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

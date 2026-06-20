@@ -1,0 +1,66 @@
+profession: doctor
+
+llm:
+  model: google/gemini-3.5-flash
+  temperature: 0.05
+  max_tokens: 7000
+
+prompts:
+  incremental_pass: prompts/doctor/incremental_pass.md
+  final_pass: prompts/doctor/final_pass.md
+  memory_update: prompts/doctor/memory_update.md
+  action_planner: prompts/doctor/action_planner.md
+
+privacy:
+  enabled: true
+  healthcare_phi_rules_enabled: true
+  preserve_clinical_durations: true
+  preserve_relative_dates: true
+  redact_direct_identifiers: true
+  date_policy: preserve_clinical_redact_identity_dates
+
+memory:
+  enabled: true
+  agent_decides_what_to_store: true
+  store_patient_timeline: true
+  store_followups: true
+  store_allergy_statements: true
+  store_medication_mentions: true
+  store_unresolved_questions: true
+  blocked_types:
+    - patient_identifier
+    - contact_info
+    - private_person
+    - private_phone
+    - private_email
+    - private_address
+    - private_date
+    - direct_identifier
+  allowed_types:
+    - encounter_summary
+    - symptom_history
+    - allergy_statement
+    - allergy
+    - medication_mention
+    - medication_history
+    - follow_up
+    - return_precautions
+    - care_plan
+    - unresolved_question
+    - safety_context
+
+artifacts:
+  generate:
+    - speaker_role_inference
+    - clinical_fact_extraction
+    - soap_note
+    - missing_information
+    - safety_flags
+    - icd10_suggestions
+    - patient_summary
+    - follow_up_plan
+    - action_plan
+
+tools:
+  notion:
+    parent_page_id: 385ed79b-5001-801c-bc50-d4dcae27c1ee

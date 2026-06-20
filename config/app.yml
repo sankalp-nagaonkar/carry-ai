@@ -1,0 +1,68 @@
+app:
+  name: Carry
+  mode: backend
+
+llm:
+  provider: fastrouter
+  base_url: https://api.fastrouter.ai/api/v1
+  default_model: google/gemini-3.5-flash
+  temperature: 0.1
+  max_tokens: 6000
+
+processing:
+  incremental_enabled: true
+  incremental_debounce_ms: 8000
+  min_new_chunks_for_incremental_pass: 4
+  final_pass_on_session_end: true
+  final_pass_required: true
+
+privacy:
+  enabled: true
+  provider: openai_privacy_filter
+  runtime: local_default
+  mode: deidentify_before_llm
+  placeholder_style: stable_numbered
+  store_redaction_map: true
+  raw_retention_policy: retain_raw_until_privacy_filter_then_delete
+  send_raw_text_to_llm: false
+  on_failure: block
+
+actions:
+  execution_enabled: false
+  proposed_actions_always_generated: true
+  executor: scalekit
+
+memory:
+  enabled: true
+  mode: automatic
+  storage: sqlite
+
+storage:
+  provider: sqlite
+  sqlite_path: data/carry.sqlite
+
+scalekit:
+  enabled: true
+  environment_url_env: SCALEKIT_ENVIRONMENT_URL
+  client_id_env: SCALEKIT_CLIENT_ID
+  client_secret_env: SCALEKIT_CLIENT_SECRET
+
+tools:
+  notion:
+    enabled: true
+    connection_name_env: NOTION_CONNECTION_NAME
+  google_calendar:
+    enabled: true
+    connection_name_env: GOOGLE_CALENDAR_CONNECTION_NAME
+  gmail:
+    enabled: false
+    connection_name_env: GMAIL_CONNECTION_NAME
+  google_sheets:
+    enabled: false
+    connection_name_env: GOOGLE_SHEETS_CONNECTION_NAME
+  slack:
+    enabled: false
+    connection_name_env: SLACK_CONNECTION_NAME
+  github:
+    enabled: false
+    connection_name_env: GITHUB_CONNECTION_NAME

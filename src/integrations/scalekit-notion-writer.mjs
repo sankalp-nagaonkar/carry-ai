@@ -68,8 +68,10 @@ export class ScalekitNotionWriter {
       toolInput: { page_id: normalizeNotionId(pageId) },
     });
     const title = notionTitle(result.data);
+    const parentPageId = notionParentPageId(result.data);
     if (title?.trim().toLowerCase() !== patientName.trim().toLowerCase()) return null;
-    return { id: normalizeNotionId(pageId), title };
+    if (normalizeNotionId(parentPageId) !== normalizeNotionId(this.parentPageId)) return null;
+    return { id: normalizeNotionId(pageId), title, parentPageId: normalizeNotionId(parentPageId) };
   }
 
   async findPatientPage(patientName) {
@@ -82,9 +84,12 @@ export class ScalekitNotionWriter {
           connector: this.connector,
           toolInput: { query: patientName, page_size: 10 },
         });
-        const candidates = extractNotionSearchResults(result.data);
-        const found = candidates.find((p) => p.title?.trim().toLowerCase() === patientName.trim().toLowerCase() && p.id);
-        if (found) return found;
+        const candidates = extractNotionSearchResults(result.data)
+          .filter((p) => p.title?.trim().toLowerCase() === patientName.trim().toLowerCase() && p.id);
+        for (const candidate of candidates) {
+          const validated = await this.validatePatientPage(candidate.id, patientName).catch(() => null);
+          if (validated?.id) return validated;
+        }
       } catch (error) {
         lastError = error;
       }
@@ -169,9 +174,20 @@ function extractNotionSearchResults(data) {
 }
 
 function notionTitle(page) {
-  const propTitle = page.properties?.title?.title || page.properties?.Name?.title || page.properties?.name?.title;
+  const propTitle = page?.properties?.title?.title || page?.properties?.Name?.title || page?.properties?.name?.title;
   if (Array.isArray(propTitle)) return propTitle.map((x) => x.plain_text || x.text?.content || '').join('');
-  return page.title || page.name || page.properties?.title || '';
+  return page?.title || page?.name || page?.properties?.title || '';
+}
+
+function notionParentPageId(page, depth = 0) {
+  if (!page || typeof page !== 'object' || depth > 4) return null;
+  const parent = page.parent;
+  if (parent?.page_id || parent?.pageId) return parent.page_id || parent.pageId;
+  for (const key of ['page', 'data', 'result', 'object']) {
+    const found = notionParentPageId(page[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
 }
 
 function normalizeCreatedPage(data) {
@@ -198,7 +214,12 @@ function extractPageId(data, depth = 0) {
 }
 
 function normalizeNotionId(id) {
-  return String(id || '').trim();
+  const value = String(id || '').trim();
+  const compact = value.replace(/-/g, '');
+  if (/^[0-9a-f]{32}$/i.test(compact)) {
+    return [compact.slice(0, 8), compact.slice(8, 12), compact.slice(12, 16), compact.slice(16, 20), compact.slice(20)].join('-');
+  }
+  return value;
 }
 
 function formatHumanDateTime(value) {

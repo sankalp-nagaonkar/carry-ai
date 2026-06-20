@@ -10,6 +10,7 @@ const state = {
   source: null,
   running: false,
   scenario: 'visit1',
+  transcriptSource: 'simulator',
   turns: 0,
   symptoms: new Set(),
   meds: new Map(),
@@ -22,13 +23,29 @@ init();
 
 async function init() {
   bindNav();
+  await loadRuntimeMode();
   await refresh();
+}
+
+async function loadRuntimeMode() {
+  const querySource = new URLSearchParams(location.search).get('source');
+  if (querySource) {
+    state.transcriptSource = querySource === 'websocket' || querySource === 'real' ? 'websocket' : 'simulator';
+    syncSourceButtons();
+    return;
+  }
+  const mode = await fetch('/api/mode').then((r) => r.json()).catch(() => null);
+  if (mode?.transcriptSource) {
+    state.transcriptSource = mode.transcriptSource === 'websocket' ? 'websocket' : 'simulator';
+    syncSourceButtons();
+  }
 }
 
 function bindNav() {
   $$('.rail-link').forEach((b) => b.addEventListener('click', () => go(b.dataset.page)));
   $$('.launch-visit').forEach((b) => b.addEventListener('click', startVisit));
   $$('.scenario-opt').forEach((b) => b.addEventListener('click', () => setScenario(b.dataset.scenario)));
+  $$('.source-opt').forEach((b) => b.addEventListener('click', () => setTranscriptSource(b.dataset.source)));
   $('#approve-all')?.addEventListener('click', () => go('today'));
   $('#reset-demo')?.addEventListener('click', resetDemo);
 }
@@ -45,8 +62,22 @@ function setScenario(scenario) {
   renderToday();
 }
 
+function setTranscriptSource(source) {
+  if (state.running || source === state.transcriptSource) return;
+  state.transcriptSource = source === 'websocket' ? 'websocket' : 'simulator';
+  syncSourceButtons();
+  renderToday();
+}
+
 function syncScenarioButtons() {
   $$('.scenario-opt').forEach((b) => b.classList.toggle('active', b.dataset.scenario === state.scenario));
+}
+
+function syncSourceButtons() {
+  $$('.source-opt').forEach((b) => b.classList.toggle('active', b.dataset.source === state.transcriptSource));
+  const isReal = state.transcriptSource === 'websocket';
+  $('#scenario-picker')?.classList.toggle('is-muted', isReal);
+  $$('.scenario-opt').forEach((b) => { b.disabled = state.running || isReal; });
 }
 
 /* ---------------- LIVE RECORD (from backend memory) ---------------- */
@@ -57,6 +88,7 @@ async function refresh() {
   if (!state.running) {
     state.scenario = state.record.visits.length === 0 ? 'visit1' : 'visit2';
     syncScenarioButtons();
+    syncSourceButtons();
   }
   renderToday();
   renderProfile();
@@ -140,10 +172,12 @@ function renderToday() {
   $('#brief-avatar').textContent = PATIENT.initials;
   $('#brief-name').textContent = PATIENT.name;
   $('#brief-meta').textContent = `${PATIENT.age}, ${PATIENT.pronouns} \u00b7 ${PATIENT.mrn} \u00b7 09:30`;
-  $('#brief-badge').textContent = scn.badge;
-  $('#brief-lead').textContent = hasHistory
-    ? 'Pre-visit briefing, built from what Carry captured in earlier visits.'
-    : 'First consult. No prior visits on file yet.';
+  $('#brief-badge').textContent = state.transcriptSource === 'websocket' ? 'Real transcript' : scn.badge;
+  $('#brief-lead').textContent = state.transcriptSource === 'websocket'
+    ? 'Real transcript source selected. Carry will listen to the global POC WebSocket stream and finalize after a short idle window.'
+    : hasHistory
+      ? 'Pre-visit briefing, built from what Carry captured in earlier visits.'
+      : 'First consult. No prior visits on file yet.';
 
   $('#brief-last').textContent = hasHistory ? rec.lastSummary : 'No prior visits recorded for this patient.';
   setChips('#brief-meds', rec.medications.map((m) => m.name), 'None on file');
@@ -417,16 +451,21 @@ function startVisit() {
   resetVisit();
   go('visit');
   state.running = true;
-  $('#visit-scenario').textContent = state.scenario === 'visit1' ? 'Visit 1' : 'Visit 2';
+  $('#visit-scenario').textContent = state.transcriptSource === 'websocket'
+    ? 'Real WebSocket'
+    : (state.scenario === 'visit1' ? 'Visit 1' : 'Visit 2');
   $$('.launch-visit').forEach((b) => { b.disabled = true; b.textContent = 'Visit in progress'; });
   $$('.scenario-opt').forEach((b) => { b.disabled = true; });
+  $$('.source-opt').forEach((b) => { b.disabled = true; });
   $('#reset-demo') && ($('#reset-demo').disabled = true);
-  setLive('live', 'Listening');
+  setLive('live', state.transcriptSource === 'websocket' ? 'Connecting' : 'Listening');
 
-  const source = new EventSource(`/api/live?scenario=${state.scenario}`);
+  const source = new EventSource(`/api/live?scenario=${state.scenario}&source=${state.transcriptSource}`);
   state.source = source;
 
   source.addEventListener('chunk', (e) => onChunk(parse(e)));
+  source.addEventListener('websocket_status', (e) => onWebsocketStatus(parse(e)));
+  source.addEventListener('websocket_complete', (e) => addAction('Live transcript complete', `Capture ended: ${parse(e).reason || 'completed'}.`, 'tag-teal'));
   source.addEventListener('incremental_started', () => setLive('thinking', 'Understanding'));
   source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); });
   source.addEventListener('final_started', () => setLive('thinking', 'Drafting note'));
@@ -453,6 +492,21 @@ function resetVisit() {
   $('#action-stack').innerHTML = '<p class="live-empty">Calendar, lab, and sync drafts appear here as the visit progresses.</p>';
   $('#review').hidden = true;
   $('#card-safety').classList.remove('flag');
+}
+
+function onWebsocketStatus(data) {
+  const status = data?.status || 'event';
+  if (status === 'connecting') {
+    setLive('thinking', 'Connecting');
+    addAction('Real transcript source', `Connecting to ${data.backendUrl || 'the live WebSocket'}.`, 'tag-teal');
+  } else if (status === 'connected') {
+    setLive('live', 'Listening');
+    addAction('Real transcript connected', `Listening to ${data.scope || 'global'} stream.`, 'tag-good');
+  } else if (status === 'conversation_started') {
+    setLive('live', 'Conversation started');
+  } else if (status === 'error') {
+    addAction('WebSocket issue', data.error || 'Connection issue', 'tag-warn');
+  }
 }
 
 function onChunk(c) {
@@ -674,7 +728,8 @@ async function finishVisit(source, payload) {
   state.newestSession = payload?.sessionId || null;
   setLive('done', 'Visit complete');
   $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = 'Begin next visit'; });
-  $$('.scenario-opt').forEach((b) => { b.disabled = false; });
+  $$('.source-opt').forEach((b) => { b.disabled = false; });
+  syncSourceButtons();
   $('#reset-demo') && ($('#reset-demo').disabled = false);
 
   // The record is now genuinely updated in the backend. Rebuild every view from it.

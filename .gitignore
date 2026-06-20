@@ -37,6 +37,7 @@ coverage/
 # Temp
 tmp/
 .tmp/
+.last_live_transcript_global_event_id
 
 # Deck QA previews (regenerable)
 deck/preview-*.png

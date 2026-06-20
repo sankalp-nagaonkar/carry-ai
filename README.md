@@ -38,11 +38,26 @@ transcript simulator stands in for the wearable.
 ```bash
 npm install
 cp .env.example .env   # fill in your keys
-npm run live          # Doctor Mode at http://localhost:5173
-npm run lawyer:live   # Lawyer Mode at http://localhost:5174
+npm run live              # Doctor Mode simulator at http://localhost:5173
+npm run doctor:live:sim   # same as above, explicit simulator mode
+npm run doctor:live:real  # Doctor Mode with real POC WebSocket transcript input
+npm run lawyer:live       # Lawyer Mode simulator at http://localhost:5174
 ```
 
-### Doctor demo flow
+### Doctor transcript sources
+
+Doctor Mode can run from either source:
+
+- **Simulator**: the built-in two-visit medical scenario. Use `npm run live` or `npm run doctor:live:sim`.
+- **Real WebSocket**: the POC global transcript API at `/v4/live/transcripts`. Set `CARRY_BACKEND_WS_URL` if you want a different ngrok URL, then run `npm run doctor:live:real`.
+
+```bash
+CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run doctor:live:real
+```
+
+The dashboard also has a **Source** picker, so you can switch between Simulator and Real WebSocket from the UI. Real WebSocket mode finalizes the visit after a short idle window so the final clinical draft can run.
+
+### Doctor simulator demo flow
 
 1. Start on Today with an empty patient record
 2. Keep the picker on Visit 1, click Begin next visit
@@ -67,9 +82,11 @@ Use **Reset matter** (top right) to clear the matter and replay from scratch.
 ### Options
 
 ```bash
-PORT=8080 npm run live                 # different doctor port
-LAWYER_PORT=8081 npm run lawyer:live   # different lawyer port
-SIM_DELAY_MS=2500 npm run lawyer:live  # slow the conversation pacing
+PORT=8080 npm run live                       # different doctor port
+CARRY_WS_IDLE_MS=20000 npm run doctor:live:real  # longer idle window before final pass
+CARRY_WS_MAX_MS=300000 npm run doctor:live:real  # hard stop for real transcript capture
+LAWYER_PORT=8081 npm run lawyer:live         # different lawyer port
+SIM_DELAY_MS=2500 npm run lawyer:live        # slow simulator conversation pacing
 ```
 
 ## Architecture

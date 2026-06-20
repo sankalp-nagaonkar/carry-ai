@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CarryBackend } from '../core/carry-backend.mjs';
 import { getDoctorScenario, streamChunks } from '../simulators/doctor-transcript-simulator.mjs';
 import { ScalekitNotionWriter } from '../integrations/scalekit-notion-writer.mjs';
+import { LiveTranscriptWsConsumer } from '../transcripts/live-transcript-ws-consumer.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../../public');
@@ -19,6 +20,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/reset') return sendJson(res, resetRecord(url.searchParams.get('entityId') || 'patient_demo_001'));
     if (url.pathname === '/api/sessions') return sendJson(res, listSessions());
     if (url.pathname === '/api/context') return sendJson(res, listContext(url.searchParams.get('entityId') || 'patient_demo_001'));
+    if (url.pathname === '/api/mode') return sendJson(res, runtimeMode());
     if (url.pathname === '/api/health') return sendJson(res, { ok: true, name: 'Carry dashboard' });
     return serveStatic(res, url.pathname);
   } catch (error) {
@@ -50,7 +52,11 @@ async function handleLive(req, res, url) {
   };
 
   const delayMs = Number(url.searchParams.get('delayMs') || process.env.SIM_DELAY_MS || 1500);
-  const scenario = url.searchParams.get('scenario') === 'visit1' ? 'visit1' : 'visit2';
+  const requestedSource = url.searchParams.get('source') || process.env.CARRY_TRANSCRIPT_SOURCE || 'simulator';
+  const sourceMode = ['websocket', 'real', 'live'].includes(requestedSource) ? 'websocket' : 'simulator';
+  const scenario = sourceMode === 'simulator'
+    ? (url.searchParams.get('scenario') === 'visit1' ? 'visit1' : 'visit2')
+    : 'real_websocket';
   const carry = new CarryBackend({ profession: 'doctor' });
   const minChunks = carry.config.app.processing?.min_new_chunks_for_incremental_pass || 4;
   const llm = {
@@ -62,52 +68,68 @@ async function handleLive(req, res, url) {
     profession: 'doctor',
     entityType: 'patient',
     entityId: 'patient_demo_001',
-    source: 'dashboard_live_simulator',
-    metadata: { encounter_type: 'outpatient_visit', demo: true, scenario },
+    source: sourceMode === 'websocket' ? 'poc_global_live_transcript_websocket' : 'dashboard_live_simulator',
+    metadata: { encounter_type: 'outpatient_visit', demo: true, scenario, source_mode: sourceMode },
   });
 
   emit('session', {
     sessionId: session.session_id,
     entityId: session.entity_id,
     scenario,
+    sourceMode,
     privacyEnabled: Boolean(carry.config.app.privacy?.enabled),
     minChunks,
     delayMs,
     llm,
     notionEnabled: Boolean(process.env.NOTION_CONNECTION_NAME),
+    websocket: sourceMode === 'websocket' ? {
+      backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
+      idleMs: Number(url.searchParams.get('idleMs') || process.env.CARRY_WS_IDLE_MS || 12000),
+      maxMs: Number(url.searchParams.get('maxMs') || process.env.CARRY_WS_MAX_MS || 300000),
+    } : null,
   });
 
-  let chunksSincePass = 0;
-  let incrementalCount = 0;
+  const state = { chunksSincePass: 0, incrementalCount: 0 };
+  const ingestAndMaybeProcess = async (chunk) => {
+    if (closed) return;
+    const result = carry.ingestChunk({ sessionId: session.session_id, ...chunk });
+    state.chunksSincePass++;
+    emit('chunk', {
+      chunkId: chunk.chunkId,
+      speaker: chunk.speaker,
+      incomingText: chunk.text,
+      sanitizedText: result.sanitizedText,
+      redactions: result.redactions,
+      speakerId: result.speakerId,
+      sourceMode,
+    });
+
+    if (state.chunksSincePass >= minChunks) {
+      state.incrementalCount++;
+      emit('incremental_started', { pass: state.incrementalCount });
+      try {
+        const draft = await carry.processIncremental(session.session_id);
+        emit('incremental', { pass: state.incrementalCount, draft });
+      } catch (error) {
+        // A failed incremental pass must not abort the visit. The final pass is
+        // authoritative for the record. Surface it quietly and continue.
+        emit('incremental', { pass: state.incrementalCount, draft: null, note: 'incremental skipped' });
+      }
+      state.chunksSincePass = 0;
+    }
+  };
 
   try {
-    await streamChunks(getDoctorScenario(scenario), async (chunk) => {
+    if (sourceMode === 'websocket') {
+      const transcriptResult = await consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, isClosed: () => closed });
       if (closed) return;
-      const result = carry.ingestChunk({ sessionId: session.session_id, ...chunk });
-      chunksSincePass++;
-      emit('chunk', {
-        chunkId: chunk.chunkId,
-        speaker: chunk.speaker,
-        incomingText: chunk.text,
-        sanitizedText: result.sanitizedText,
-        redactions: result.redactions,
-        speakerId: result.speakerId,
-      });
-
-      if (chunksSincePass >= minChunks) {
-        incrementalCount++;
-        emit('incremental_started', { pass: incrementalCount });
-        try {
-          const draft = await carry.processIncremental(session.session_id);
-          emit('incremental', { pass: incrementalCount, draft });
-        } catch (error) {
-          // A failed incremental pass must not abort the visit. The final pass is
-          // authoritative for the record. Surface it quietly and continue.
-          emit('incremental', { pass: incrementalCount, draft: null, note: 'incremental skipped' });
-        }
-        chunksSincePass = 0;
+      emit('websocket_complete', transcriptResult);
+      if (!transcriptResult.chunks) {
+        throw new Error(`No live transcript chunks received from WebSocket before ${transcriptResult.reason}`);
       }
-    }, { delayMs });
+    } else {
+      await streamChunks(getDoctorScenario(scenario), ingestAndMaybeProcess, { delayMs });
+    }
 
     if (closed) return;
     emit('final_started', {});
@@ -129,6 +151,116 @@ async function handleLive(req, res, url) {
   } finally {
     if (!closed) res.end();
   }
+}
+
+async function consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, isClosed }) {
+  const backendUrl = url.searchParams.get('backendUrl') || process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app';
+  const idleMs = Number(url.searchParams.get('idleMs') || process.env.CARRY_WS_IDLE_MS || 12000);
+  const maxMs = Number(url.searchParams.get('maxMs') || process.env.CARRY_WS_MAX_MS || 300000);
+  const consumer = new LiveTranscriptWsConsumer({ backendUrl });
+  const controller = new AbortController();
+  const seen = new Map();
+  let chunks = 0;
+  let done = false;
+  let idleTimer = null;
+  let maxTimer = null;
+  let resolveDone;
+  const donePromise = new Promise((resolve) => { resolveDone = resolve; });
+
+  const finish = (reason) => {
+    if (done) return;
+    done = true;
+    clearTimeout(idleTimer);
+    clearTimeout(maxTimer);
+    controller.abort();
+    resolveDone(reason);
+  };
+
+  req.on('close', () => finish('client_disconnected'));
+  maxTimer = setTimeout(() => finish(chunks ? 'max_duration_reached' : 'no_transcript_before_max_duration'), maxMs);
+
+  const resetIdle = () => {
+    clearTimeout(idleTimer);
+    if (chunks > 0) idleTimer = setTimeout(() => finish('idle_timeout'), idleMs);
+  };
+
+  const run = consumer.consume({
+    signal: controller.signal,
+    onEvent: async (event) => {
+      if (isClosed() || done) return;
+      const eventType = event.type;
+      if (eventType === 'live_transcript_connected') {
+        emit('websocket_status', { status: 'connected', scope: event.scope || 'global' });
+        return;
+      }
+      if (eventType === 'live_transcript_heartbeat') {
+        emit('websocket_status', { status: 'heartbeat' });
+        return;
+      }
+      if (eventType === 'conversation.started') {
+        emit('websocket_status', { status: 'conversation_started', conversationId: event.conversation_id });
+        return;
+      }
+      if (eventType === 'transcript.deleted') {
+        emit('websocket_status', { status: 'transcript_deleted', segmentIds: event.segment_ids || [] });
+        return;
+      }
+      if (eventType === 'translation.ready') {
+        emit('websocket_status', { status: 'translation_ready' });
+        return;
+      }
+      if (eventType !== 'transcript.updated') {
+        emit('websocket_status', { status: 'event', eventType });
+        return;
+      }
+
+      for (const [index, segment] of (event.segments || []).entries()) {
+        const text = String(segment?.text || '').trim();
+        if (!text) continue;
+        const segmentId = segment.id || segment.segment_id || segment.transcript_segment_id || `${event.id || 'event'}_${index}`;
+        const key = String(segmentId);
+        if (seen.get(key) === text) continue;
+        seen.set(key, text);
+        chunks++;
+        resetIdle();
+        await ingestAndMaybeProcess({
+          chunkId: `ws_${safeChunkId(key)}`,
+          speaker: segment.speaker || `SPEAKER_${segment.speaker_id ?? 0}`,
+          text,
+          startMs: segment.start_ms ?? segment.startMs ?? segment.start_time_ms ?? null,
+          endMs: segment.end_ms ?? segment.endMs ?? segment.end_time_ms ?? null,
+          confidence: segment.confidence ?? null,
+          isFinal: segment.is_final ?? segment.final ?? true,
+          receivedAt: new Date().toISOString(),
+        });
+      }
+    },
+  }).catch((error) => {
+    if (!done) {
+      emit('websocket_status', { status: 'error', error: error.message || String(error) });
+      finish(chunks ? 'websocket_error_after_chunks' : 'websocket_error_no_chunks');
+    }
+  });
+
+  emit('websocket_status', { status: 'connecting', backendUrl, idleMs, maxMs });
+  const reason = await donePromise;
+  await run.catch(() => {});
+  return { reason, chunks };
+}
+
+function safeChunkId(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || `seg_${Date.now()}`;
+}
+
+function runtimeMode() {
+  const requested = process.env.CARRY_TRANSCRIPT_SOURCE || 'simulator';
+  const transcriptSource = ['websocket', 'real', 'live'].includes(requested) ? 'websocket' : 'simulator';
+  return {
+    transcriptSource,
+    backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
+    idleMs: Number(process.env.CARRY_WS_IDLE_MS || 12000),
+    maxMs: Number(process.env.CARRY_WS_MAX_MS || 300000),
+  };
 }
 
 function listSessions() {

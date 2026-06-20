@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Carry Clinical Co-Pilot</title>
+    <link rel="icon" href="data:," />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet" />
@@ -55,6 +56,11 @@
               <h1>Good morning, Dr. Rao</h1>
             </div>
             <div class="head-actions">
+              <div class="scenario-picker" id="source-picker" role="group" aria-label="Transcript source">
+                <span class="scenario-label">Source</span>
+                <button class="source-opt active" data-source="simulator">Simulator</button>
+                <button class="source-opt" data-source="websocket">Real WebSocket</button>
+              </div>
               <div class="scenario-picker" id="scenario-picker" role="group" aria-label="Demo scenario">
                 <span class="scenario-label">Demo</span>
                 <button class="scenario-opt active" data-scenario="visit1">Visit 1</button>

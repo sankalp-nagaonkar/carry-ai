@@ -1,9 +1,8 @@
-import { PATIENT, OTHER_APPOINTMENTS, SCENARIOS } from '/data.js';
+import { PATIENT, REAL_PATIENT, OTHER_APPOINTMENTS, REAL_APPOINTMENTS, SCENARIOS, REAL_SCENARIO } from '/data.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
-const ENTITY = PATIENT.id;
 const NODE_W = 132, NODE_H = 48;
 
 const state = {
@@ -12,6 +11,8 @@ const state = {
   running: false,
   scenario: 'visit1',
   transcriptSource: 'simulator',
+  patient: PATIENT,
+  appointments: OTHER_APPOINTMENTS,
   turns: 0,
   symptoms: new Set(),
   meds: new Map(),
@@ -29,24 +30,30 @@ async function init() {
 }
 
 async function loadRuntimeMode() {
-  const querySource = new URLSearchParams(location.search).get('source');
-  if (querySource) {
-    state.transcriptSource = querySource === 'websocket' || querySource === 'real' ? 'websocket' : 'simulator';
-    syncSourceButtons();
-    return;
-  }
   const mode = await fetch('/api/mode').then((r) => r.json()).catch(() => null);
-  if (mode?.transcriptSource) {
-    state.transcriptSource = mode.transcriptSource === 'websocket' ? 'websocket' : 'simulator';
-    syncSourceButtons();
-  }
+  applyRuntimeMode(mode?.transcriptSource === 'websocket' ? 'websocket' : 'simulator');
+}
+
+function applyRuntimeMode(source) {
+  state.transcriptSource = source === 'websocket' ? 'websocket' : 'simulator';
+  const isReal = state.transcriptSource === 'websocket';
+  state.patient = isReal ? REAL_PATIENT : PATIENT;
+  state.appointments = isReal ? REAL_APPOINTMENTS : OTHER_APPOINTMENTS;
+  document.body.dataset.transcriptSource = state.transcriptSource;
+  document.title = isReal ? 'Carry Real Clinical Transcript' : 'Carry Clinical Co-Pilot';
+  $('.rail-foot-title').textContent = isReal ? 'Doctor Mode · Real' : 'Doctor Mode · Simulator';
+  $('.rail-foot-copy').textContent = isReal
+    ? 'Real transcript input. Clinician approves. End visit manually.'
+    : 'AI prepares. Clinician approves. No automatic actions.';
+  $('#scenario-picker')?.toggleAttribute('hidden', isReal);
+  $('#reset-demo').textContent = isReal ? 'Reset Sam record' : 'Reset record';
+  $$('.launch-visit').forEach((b) => { b.textContent = isReal ? 'Begin real visit' : 'Begin next visit'; });
 }
 
 function bindNav() {
   $$('.rail-link').forEach((b) => b.addEventListener('click', () => go(b.dataset.page)));
   $$('.launch-visit').forEach((b) => b.addEventListener('click', startVisit));
   $$('.scenario-opt').forEach((b) => b.addEventListener('click', () => setScenario(b.dataset.scenario)));
-  $$('.source-opt').forEach((b) => b.addEventListener('click', () => setTranscriptSource(b.dataset.source)));
   $('#end-visit')?.addEventListener('click', endVisit);
   $('#approve-all')?.addEventListener('click', () => go('today'));
   $('#reset-demo')?.addEventListener('click', resetDemo);
@@ -64,33 +71,19 @@ function setScenario(scenario) {
   renderToday();
 }
 
-function setTranscriptSource(source) {
-  if (state.running || source === state.transcriptSource) return;
-  state.transcriptSource = source === 'websocket' ? 'websocket' : 'simulator';
-  syncSourceButtons();
-  renderToday();
-}
-
 function syncScenarioButtons() {
   $$('.scenario-opt').forEach((b) => b.classList.toggle('active', b.dataset.scenario === state.scenario));
-}
-
-function syncSourceButtons() {
-  $$('.source-opt').forEach((b) => b.classList.toggle('active', b.dataset.source === state.transcriptSource));
-  const isReal = state.transcriptSource === 'websocket';
-  $('#scenario-picker')?.classList.toggle('is-muted', isReal);
-  $$('.scenario-opt').forEach((b) => { b.disabled = state.running || isReal; });
+  $$('.scenario-opt').forEach((b) => { b.disabled = state.running; });
 }
 
 /* ---------------- LIVE RECORD (from backend memory) ---------------- */
 async function refresh() {
-  const data = await fetch(`/api/context?entityId=${ENTITY}`).then((r) => r.json()).catch(() => ({ items: [], sessions: [] }));
+  const data = await fetch(`/api/context?entityId=${entityId()}`).then((r) => r.json()).catch(() => ({ items: [], sessions: [] }));
   state.record = deriveRecord(data.items || [], data.sessions || []);
-  // Decide which visit is next based on how many visits have actually happened.
-  if (!state.running) {
+  // Decide which simulated visit is next based on how many visits have actually happened.
+  if (!state.running && state.transcriptSource !== 'websocket') {
     state.scenario = state.record.visits.length === 0 ? 'visit1' : 'visit2';
     syncScenarioButtons();
-    syncSourceButtons();
   }
   renderToday();
   renderProfile();
@@ -166,17 +159,30 @@ function summarizeVisit(sid, rec) {
 }
 
 /* ---------------- TODAY ---------------- */
+function renderPatientChrome() {
+  const p = state.patient;
+  $('#visit-patient').textContent = p.name;
+  $('#profile-avatar').textContent = p.initials;
+  $('#profile-name').textContent = p.name;
+  $('#profile-meta').textContent = `${p.age}, ${p.pronouns} · ${p.mrn} · Primary: ${p.primaryDoctor}`;
+  $('#timeline-patient').textContent = p.name;
+  $('#graph-patient').textContent = p.name;
+}
+
 function renderToday() {
   const rec = state.record || emptyRecord();
-  const scn = SCENARIOS[state.scenario];
+  const isReal = state.transcriptSource === 'websocket';
+  const scn = isReal ? REAL_SCENARIO : SCENARIOS[state.scenario];
+  const patient = state.patient;
   const hasHistory = rec.visits.length > 0;
+  renderPatientChrome();
 
-  $('#brief-avatar').textContent = PATIENT.initials;
-  $('#brief-name').textContent = PATIENT.name;
-  $('#brief-meta').textContent = `${PATIENT.age}, ${PATIENT.pronouns} \u00b7 ${PATIENT.mrn} \u00b7 09:30`;
-  $('#brief-badge').textContent = state.transcriptSource === 'websocket' ? 'Real transcript' : scn.badge;
-  $('#brief-lead').textContent = state.transcriptSource === 'websocket'
-    ? 'Real transcript source selected. Carry will listen to the global POC WebSocket stream and finalize after a short idle window.'
+  $('#brief-avatar').textContent = patient.initials;
+  $('#brief-name').textContent = patient.name;
+  $('#brief-meta').textContent = `${patient.age}, ${patient.pronouns} \u00b7 ${patient.mrn} \u00b7 09:30`;
+  $('#brief-badge').textContent = scn.badge;
+  $('#brief-lead').textContent = isReal
+    ? 'Real transcript mode. Carry listens to the POC WebSocket stream. Press End visit when the conversation is complete.'
     : hasHistory
       ? 'Pre-visit briefing, built from what Carry captured in earlier visits.'
       : 'First consult. No prior visits on file yet.';
@@ -202,10 +208,9 @@ function renderToday() {
     strip.hidden = true;
   }
 
-  // Schedule: Anaya live + ambient others.
   const appts = [
-    { id: 'a1', time: '09:30', name: PATIENT.name, reason: scn.reason, status: 'next' },
-    ...OTHER_APPOINTMENTS,
+    { id: 'a1', time: '09:30', name: patient.name, reason: scn.reason, status: 'next' },
+    ...state.appointments,
   ];
   $('#schedule-count').textContent = `${appts.length} appointments`;
   $('#appt-list').innerHTML = appts.map((a) => `
@@ -369,7 +374,7 @@ function renderGraph() {
 // captured fact connected to the visit where Carry learned it.
 function buildGraph(rec) {
   const cx = 500, cy = 330;
-  const nodes = [{ id: 'patient', type: 'patient', label: PATIENT.name, sub: 'Patient', x: cx, y: cy }];
+  const nodes = [{ id: 'patient', type: 'patient', label: state.patient.name, sub: 'Patient', x: cx, y: cy }];
   const edges = [];
 
   const visitCount = rec.visits.length;
@@ -458,7 +463,6 @@ function startVisit() {
     : (state.scenario === 'visit1' ? 'Visit 1' : 'Visit 2');
   $$('.launch-visit').forEach((b) => { b.disabled = true; b.textContent = 'Visit in progress'; });
   $$('.scenario-opt').forEach((b) => { b.disabled = true; });
-  $$('.source-opt').forEach((b) => { b.disabled = true; });
   $('#reset-demo') && ($('#reset-demo').disabled = true);
   $('#end-visit').hidden = state.transcriptSource !== 'websocket';
   $('#end-visit').disabled = true;
@@ -511,11 +515,17 @@ function onSession(data) {
 }
 
 async function endVisit() {
-  if (!state.running || !state.currentSessionId) return;
+  if (!state.running) return;
   $('#end-visit').disabled = true;
   setLive('thinking', 'Ending visit');
   addAction('End requested', 'Final draft will run after the live transcript stream closes.', 'tag-warn');
-  await fetch(`/api/end-live?sessionId=${encodeURIComponent(state.currentSessionId)}`).catch(() => {});
+  const suffix = state.currentSessionId ? `?sessionId=${encodeURIComponent(state.currentSessionId)}` : '';
+  const result = await fetch(`/api/end-live${suffix}`).then((r) => r.json()).catch((error) => ({ ok: false, error: error.message || String(error) }));
+  if (!result.ok) {
+    $('#end-visit').disabled = false;
+    setLive('live', 'Still listening');
+    addAction('End visit issue', result.error || 'Could not end active stream.', 'tag-danger');
+  }
 }
 
 function onWebsocketStatus(data) {
@@ -769,11 +779,10 @@ async function finishVisit(source, payload) {
   state.running = false;
   state.newestSession = payload?.sessionId || null;
   setLive('done', 'Visit complete');
-  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = 'Begin next visit'; });
+  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin real visit' : 'Begin next visit'; });
   $('#end-visit').hidden = true;
   $('#end-visit').disabled = false;
-  $$('.source-opt').forEach((b) => { b.disabled = false; });
-  syncSourceButtons();
+  syncScenarioButtons();
   $('#reset-demo') && ($('#reset-demo').disabled = false);
 
   // The record is now genuinely updated in the backend. Rebuild every view from it.
@@ -789,7 +798,7 @@ function setLive(stateName, label) {
 
 async function resetDemo() {
   if (state.running) return;
-  await fetch(`/api/reset?entityId=${ENTITY}`).catch(() => {});
+  await fetch(`/api/reset?entityId=${entityId()}`).catch(() => {});
   state.newestSession = null;
   $('#update-list').innerHTML = '<li class="update-empty">Updates from visits appear here as Carry understands them.</li>';
   await refresh();
@@ -797,6 +806,7 @@ async function resetDemo() {
 }
 
 /* ---------------- utils ---------------- */
+function entityId() { return state.patient.id; }
 function emptyRecord() {
   return { items: [], visits: [], order: new Map(), allergies: [], medications: [], conditions: [], symptoms: [], precautions: [], lastSummary: '' };
 }

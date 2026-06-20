@@ -59,6 +59,7 @@ async function handleLive(req, res, url) {
   const scenario = sourceMode === 'simulator'
     ? (url.searchParams.get('scenario') === 'visit1' ? 'visit1' : 'visit2')
     : 'real_websocket';
+  const entityId = sourceMode === 'websocket' ? 'patient_real_sam_altman' : 'patient_demo_001';
   const carry = new CarryBackend({ profession: 'doctor' });
   const minChunks = carry.config.app.processing?.min_new_chunks_for_incremental_pass || 4;
   const llm = {
@@ -69,9 +70,9 @@ async function handleLive(req, res, url) {
   const session = carry.createSession({
     profession: 'doctor',
     entityType: 'patient',
-    entityId: 'patient_demo_001',
+    entityId,
     source: sourceMode === 'websocket' ? 'poc_global_live_transcript_websocket' : 'dashboard_live_simulator',
-    metadata: { encounter_type: 'outpatient_visit', demo: true, scenario, source_mode: sourceMode },
+    metadata: { encounter_type: 'outpatient_visit', demo: true, scenario, source_mode: sourceMode, patient_name: sourceMode === 'websocket' ? 'Sam Altman' : 'Anaya Mehta' },
   });
 
   emit('session', {
@@ -257,11 +258,24 @@ function stableSpeakerLabel(raw, aliases) {
 }
 
 function endLiveSession(sessionId) {
-  if (!sessionId) return { ok: false, error: 'Missing sessionId' };
-  const active = activeLiveSessions.get(sessionId);
-  if (!active) return { ok: false, error: 'No active live session for sessionId' };
+  let targetSessionId = sessionId;
+  let active = targetSessionId ? activeLiveSessions.get(targetSessionId) : null;
+
+  if (!active && activeLiveSessions.size > 0) {
+    [targetSessionId, active] = [...activeLiveSessions.entries()]
+      .sort((a, b) => String(b[1].startedAt).localeCompare(String(a[1].startedAt)))[0];
+  }
+
+  if (!active) {
+    return {
+      ok: false,
+      error: 'No active live session',
+      activeSessionIds: [...activeLiveSessions.keys()],
+    };
+  }
+
   active.finish('ended_by_user');
-  return { ok: true, sessionId, reason: 'ended_by_user' };
+  return { ok: true, sessionId: targetSessionId, reason: 'ended_by_user' };
 }
 
 function safeChunkId(value) {

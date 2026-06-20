@@ -56,11 +56,6 @@
               <h1>Good morning, Dr. Rao</h1>
             </div>
             <div class="head-actions">
-              <div class="scenario-picker" id="source-picker" role="group" aria-label="Transcript source">
-                <span class="scenario-label">Source</span>
-                <button class="source-opt active" data-source="simulator">Simulator</button>
-                <button class="source-opt" data-source="websocket">Real WebSocket</button>
-              </div>
               <div class="scenario-picker" id="scenario-picker" role="group" aria-label="Demo scenario">
                 <span class="scenario-label">Demo</span>
                 <button class="scenario-opt active" data-scenario="visit1">Visit 1</button>
@@ -251,10 +246,10 @@
         <section class="view" id="view-profile">
           <header class="view-head">
             <div class="patient-id large">
-              <span class="avatar lg">AM</span>
+              <span class="avatar lg" id="profile-avatar">AM</span>
               <div>
-                <h1>Anaya Mehta</h1>
-                <p class="muted">34, she/her · MRN-4821 · Primary: Dr. Rao</p>
+                <h1 id="profile-name">Anaya Mehta</h1>
+                <p class="muted" id="profile-meta">34, she/her · MRN-4821 · Primary: Dr. Rao</p>
               </div>
             </div>
             <span class="tag tag-danger" id="profile-risk">Penicillin allergy</span>
@@ -267,7 +262,7 @@
         <section class="view" id="view-timeline">
           <header class="view-head">
             <div>
-              <p class="kicker">Anaya Mehta</p>
+              <p class="kicker" id="timeline-patient">Anaya Mehta</p>
               <h1>Clinical timeline</h1>
             </div>
           </header>
@@ -278,7 +273,7 @@
         <section class="view" id="view-graph">
           <header class="view-head">
             <div>
-              <p class="kicker">Anaya Mehta</p>
+              <p class="kicker" id="graph-patient">Anaya Mehta</p>
               <h1>Knowledge graph</h1>
             </div>
             <span class="muted-sm" id="graph-status">Baseline understanding</span>

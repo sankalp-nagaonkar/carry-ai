@@ -8,8 +8,10 @@ await page.goto('http://localhost:5173', { waitUntil: 'networkidle0' });
 const data = await page.evaluate(() => ({
   title: document.title,
   h1: document.querySelector('h1')?.textContent,
-  sourceButtons: [...document.querySelectorAll('.source-opt')].map((x) => ({ text: x.textContent, active: x.classList.contains('active') })),
-  scenarioDisabled: [...document.querySelectorAll('.scenario-opt')].map((x) => x.disabled),
+  bodySource: document.body.dataset.transcriptSource,
+  patient: document.querySelector('#brief-name')?.textContent,
+  sourceSwitcherExists: Boolean(document.querySelector('#source-picker')),
+  scenarioHidden: document.querySelector('#scenario-picker')?.hidden || false,
   begin: document.querySelector('.launch-visit')?.textContent,
 }));
 console.log(JSON.stringify({ data, errors }, null, 2));

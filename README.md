@@ -55,7 +55,7 @@ Doctor Mode can run from either source:
 CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run doctor:live:real
 ```
 
-The dashboard also has a **Source** picker, so you can switch between Simulator and Real WebSocket from the UI. Real WebSocket mode does not auto-finalize. Press **End visit** when the conversation is over, then the final clinical draft runs.
+The app does not let judges switch sources from inside the UI. The command determines the experience. Simulator mode shows the Visit 1 / Visit 2 scenario controls. Real WebSocket mode shows Sam Altman as the live patient, hides simulator controls, and waits for **End visit** before running the final clinical draft.
 
 ### Doctor simulator demo flow
 

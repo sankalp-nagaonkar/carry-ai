@@ -26,18 +26,21 @@ export class ScalekitNotionWriter {
 
     const title = `${formatHumanDateTime(visitAt)} Visit Note`;
     const markdown = doctorOutputToMarkdown({ output, sessionId, patientName, visitAt });
-    const result = await this.createNotionPage({
-      parentPageId: patientPage.id,
-      title,
-      blocks: markdownToNotionBlocks(markdown),
-    });
+    const result = await this.createNotionPage({ parentPageId: patientPage.id, title });
+    if (!result?.id) throw new Error(`Notion visit page was created but no page id was returned for ${title}`);
+    await this.appendNotionBlocks({ blockId: result.id, blocks: markdownToNotionBlocks(markdown) });
     return { ...result, patientPage, markdownTitle: title };
   }
 
   async getOrCreatePatientPage(patientName) {
     const registry = this.readPatientRegistry();
     const registryKey = `${this.parentPageId}:${patientName.toLowerCase()}`;
-    if (registry[registryKey]) return { id: normalizeNotionId(registry[registryKey]), title: patientName, source: 'local_registry' };
+    if (registry[registryKey]) {
+      const cached = await this.validatePatientPage(registry[registryKey], patientName).catch(() => null);
+      if (cached?.id) return { ...cached, source: 'local_registry' };
+      delete registry[registryKey];
+      this.writePatientRegistry(registry);
+    }
 
     const found = await this.findPatientPage(patientName).catch(() => null);
     if (found?.id) {
@@ -46,20 +49,32 @@ export class ScalekitNotionWriter {
       return { ...found, source: 'notion_search' };
     }
 
-    const created = await this.createNotionPage({
-      parentPageId: this.parentPageId,
-      title: patientName,
-      blocks: [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Carry patient record. Visit notes appear as timestamped subpages.' } }] } }],
-    });
+    const created = await this.createNotionPage({ parentPageId: this.parentPageId, title: patientName });
     if (!created.id) throw new Error(`Notion patient page was created but no page id was returned for ${patientName}`);
+    await this.appendNotionBlocks({
+      blockId: created.id,
+      blocks: [{ type: 'paragraph', text: 'Carry patient record. Visit notes appear as timestamped subpages.' }],
+    });
     registry[registryKey] = normalizeNotionId(created.id);
     this.writePatientRegistry(registry);
     return { id: normalizeNotionId(created.id), title: patientName, source: 'created' };
   }
 
+  async validatePatientPage(pageId, patientName) {
+    const result = await this.client.actions.executeTool({
+      toolName: 'notion_page_get',
+      identifier: this.identifier,
+      connector: this.connector,
+      toolInput: { page_id: normalizeNotionId(pageId) },
+    });
+    const title = notionTitle(result.data);
+    if (title?.trim().toLowerCase() !== patientName.trim().toLowerCase()) return null;
+    return { id: normalizeNotionId(pageId), title };
+  }
+
   async findPatientPage(patientName) {
     let lastError;
-    for (const toolName of ['notion_search', 'notion_page_search']) {
+    for (const toolName of ['notion_data_fetch', 'notion_search', 'notion_page_search']) {
       try {
         const result = await this.client.actions.executeTool({
           toolName,
@@ -78,21 +93,38 @@ export class ScalekitNotionWriter {
     return null;
   }
 
-  async createNotionPage({ parentPageId, title, blocks }) {
+  async createNotionPage({ parentPageId, title, blocks = null }) {
     if (!parentPageId) throw new Error(`Cannot create Notion page "${title}" without a parent page id`);
+    const toolInput = {
+      parent_page_id: normalizeNotionId(parentPageId),
+      properties: {
+        title: { title: [{ text: { content: title } }] },
+      },
+    };
+    if (blocks?.length) toolInput.child_blocks = blocks;
+
     const result = await this.client.actions.executeTool({
       toolName: 'notion_page_create',
       identifier: this.identifier,
       connector: this.connector,
-      toolInput: {
-        parent_page_id: normalizeNotionId(parentPageId),
-        properties: {
-          title: { title: [{ text: { content: title } }] },
-        },
-        child_blocks: blocks,
-      },
+      toolInput,
     });
     return normalizeCreatedPage(result.data);
+  }
+
+  async appendNotionBlocks({ blockId, blocks }) {
+    if (!blockId) throw new Error('Cannot append Notion blocks without a page or block id');
+    if (!blocks?.length) return null;
+    const result = await this.client.actions.executeTool({
+      toolName: 'notion_page_content_append',
+      identifier: this.identifier,
+      connector: this.connector,
+      toolInput: {
+        block_id: normalizeNotionId(blockId),
+        blocks,
+      },
+    });
+    return result.data;
   }
 
   registryPath() {
@@ -191,7 +223,7 @@ function markdownToNotionBlocks(markdown) {
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     if (!line.trim()) { flushParagraph(); continue; }
-    if (line.trim() === '---') { flushParagraph(); blocks.push({ object: 'block', type: 'divider', divider: {} }); continue; }
+    if (line.trim() === '---') { flushParagraph(); blocks.push({ type: 'divider' }); continue; }
 
     const h3 = line.match(/^###\s+(.+)/);
     const h2 = line.match(/^##\s+(.+)/);
@@ -210,11 +242,7 @@ function markdownToNotionBlocks(markdown) {
 }
 
 function notionBlock(type, content) {
-  return {
-    object: 'block',
-    type,
-    [type]: { rich_text: [{ type: 'text', text: { content: String(content || '').slice(0, 1900) } }] },
-  };
+  return { type, text: String(content || '').slice(0, 1900) };
 }
 
 function chunkString(text, size) {

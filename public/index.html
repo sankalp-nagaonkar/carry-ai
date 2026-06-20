@@ -172,7 +172,20 @@
             <section class="intel">
               <div class="intel-head">
                 <h3>Clinical intelligence</h3>
-                <span class="muted-sm">Updated live</span>
+                <span class="muted-sm" id="intel-updated">Not started</span>
+              </div>
+
+              <div class="process-strip" id="process-strip">
+                <div class="process-row">
+                  <span class="process-label">Live processing</span>
+                  <span class="process-state" id="process-state">Idle</span>
+                </div>
+                <div class="process-meta">
+                  <span id="process-heard">Last heard: none</span>
+                  <span id="process-context">Context: 0 / 4 turns</span>
+                  <span id="process-insight">Insight: not yet</span>
+                </div>
+                <div class="process-bar" aria-hidden="true"><span id="process-bar-fill"></span></div>
               </div>
 
               <div class="intel-scroll" id="intel-scroll">
@@ -182,10 +195,10 @@
                     <span class="tag" id="soap-progress">Listening</span>
                   </div>
                   <dl class="soap-grid" id="soap-grid">
-                    <div><dt>S</dt><dd id="soap-s" class="pending">Awaiting conversation</dd></div>
-                    <div><dt>O</dt><dd id="soap-o" class="pending">Awaiting conversation</dd></div>
-                    <div><dt>A</dt><dd id="soap-a" class="pending">Awaiting conversation</dd></div>
-                    <div><dt>P</dt><dd id="soap-p" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>S</dt><dd id="soap-s" class="pending">Collecting context</dd></div>
+                    <div><dt>O</dt><dd id="soap-o" class="pending">Appears after enough transcript</dd></div>
+                    <div><dt>A</dt><dd id="soap-a" class="pending">Draft, clinician review required</dd></div>
+                    <div><dt>P</dt><dd id="soap-p" class="pending">End visit for final plan</dd></div>
                   </dl>
                 </div>
 
@@ -193,38 +206,38 @@
                   <div class="intel-card-head">
                     <p class="block-label">Symptoms</p>
                   </div>
-                  <ul class="live-list" id="live-symptoms"><li class="live-empty">None detected yet</li></ul>
+                  <ul class="live-list" id="live-symptoms"><li class="live-empty">Appears after enough context</li></ul>
                 </div>
 
                 <div class="intel-card">
                   <div class="intel-card-head">
                     <p class="block-label">Medications</p>
                   </div>
-                  <ul class="live-list" id="live-meds"><li class="live-empty">None mentioned yet</li></ul>
+                  <ul class="live-list" id="live-meds"><li class="live-empty">Medication signals appear here</li></ul>
                 </div>
 
                 <div class="intel-card" id="card-safety">
                   <div class="intel-card-head">
                     <p class="block-label">Safety checks</p>
                   </div>
-                  <ul class="live-list" id="live-safety"><li class="live-empty">No conflicts detected</li></ul>
+                  <ul class="live-list" id="live-safety"><li class="live-empty">No safety signal yet</li></ul>
                 </div>
 
                 <div class="intel-card">
                   <div class="intel-card-head">
                     <p class="block-label">Missing information</p>
                   </div>
-                  <ul class="live-list" id="live-missing"><li class="live-empty">Note looks complete so far</li></ul>
+                  <ul class="live-list" id="live-missing"><li class="live-empty">Questions appear after enough context</li></ul>
                 </div>
               </div>
             </section>
 
             <aside class="sidebar-actions">
               <div class="intel-head">
-                <h3>Drafted actions</h3>
+                <h3>Activity</h3>
               </div>
               <div class="action-stack" id="action-stack">
-                <p class="live-empty">Calendar, lab, and sync drafts appear here as the visit progresses.</p>
+                <p class="live-empty">Live system events appear here.</p>
               </div>
             </aside>
           </div>

@@ -14,6 +14,13 @@ const state = {
   patient: PATIENT,
   appointments: OTHER_APPOINTMENTS,
   turns: 0,
+  minChunks: 4,
+  chunksSinceInsight: 0,
+  lastHeardAt: null,
+  lastInsightAt: null,
+  processState: 'Idle',
+  processTimer: null,
+  activitySeen: new Set(),
   symptoms: new Set(),
   meds: new Map(),
   safety: [],
@@ -474,11 +481,11 @@ function startVisit() {
   source.addEventListener('session', (e) => onSession(parse(e)));
   source.addEventListener('chunk', (e) => onChunk(parse(e)));
   source.addEventListener('websocket_status', (e) => onWebsocketStatus(parse(e)));
-  source.addEventListener('websocket_complete', (e) => addAction('Live transcript complete', `Capture ended: ${parse(e).reason || 'completed'}.`, 'tag-teal'));
-  source.addEventListener('incremental_started', () => setLive('thinking', 'Understanding'));
-  source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); });
-  source.addEventListener('final_started', () => setLive('thinking', 'Drafting note'));
-  source.addEventListener('final', (e) => onFinal(parse(e).output));
+  source.addEventListener('websocket_complete', (e) => { addActivity('Live transcript complete', `Capture ended: ${parse(e).reason || 'completed'}.`, 'tag-teal'); setProcessState('Drafting final'); });
+  source.addEventListener('incremental_started', () => { setLive('thinking', 'Understanding'); setProcessState('Understanding now'); addActivity('Understanding pass started', 'Carry has enough context to update the draft.', 'tag-teal'); });
+  source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); markInsightUpdated(); });
+  source.addEventListener('final_started', () => { setLive('thinking', 'Drafting note'); setProcessState('Drafting final'); addActivity('Final drafting started', 'Carry is preparing the review draft.', 'tag-warn'); });
+  source.addEventListener('final', (e) => { onFinal(parse(e).output); markInsightUpdated('Draft ready'); });
   source.addEventListener('notion_started', () => addAction('Notion sync', 'Preparing visit note for sync.', 'tag'));
   source.addEventListener('notion', (e) => onNotion(parse(e)));
   source.addEventListener('done', (e) => finishVisit(source, parse(e)));
@@ -489,28 +496,96 @@ function startVisit() {
 }
 
 function resetVisit() {
-  state.turns = 0; state.symptoms.clear(); state.meds.clear(); state.safety = [];
+  state.turns = 0; state.chunksSinceInsight = 0; state.lastHeardAt = null; state.lastInsightAt = null; state.processState = 'Collecting transcript'; state.activitySeen = new Set();
+  state.symptoms.clear(); state.meds.clear(); state.safety = [];
+  stopProcessTimer(); startProcessTimer();
   $('#convo-stream').innerHTML = '<p class="convo-empty">Listening for the conversation to begin.</p>';
   $('#convo-count').textContent = '0';
-  ['s', 'o', 'a', 'p'].forEach((k) => { const el = $(`#soap-${k}`); el.textContent = 'Awaiting conversation'; el.className = 'pending'; });
+  setSoapPending();
   $('#soap-progress').textContent = 'Listening'; $('#soap-progress').className = 'tag';
-  $('#live-symptoms').innerHTML = '<li class="live-empty">None detected yet</li>';
-  $('#live-meds').innerHTML = '<li class="live-empty">None mentioned yet</li>';
-  $('#live-safety').innerHTML = '<li class="live-empty">No conflicts detected</li>';
-  $('#live-missing').innerHTML = '<li class="live-empty">Note looks complete so far</li>';
-  $('#action-stack').innerHTML = '<p class="live-empty">Calendar, lab, and sync drafts appear here as the visit progresses.</p>';
+  $('#live-symptoms').innerHTML = '<li class="live-empty">Appears after enough context</li>';
+  $('#live-meds').innerHTML = '<li class="live-empty">Medication signals appear here</li>';
+  $('#live-safety').innerHTML = '<li class="live-empty">No safety signal yet</li>';
+  $('#live-missing').innerHTML = '<li class="live-empty">Questions appear after enough context</li>';
+  $('#action-stack').innerHTML = '<p class="live-empty">Live system events appear here.</p>';
   $('#end-visit').hidden = true;
   $('#end-visit').disabled = false;
   $('#review').hidden = true;
   $('#card-safety').classList.remove('flag');
+  renderProcessing();
+}
+
+function setSoapPending() {
+  const copy = {
+    s: 'Collecting context',
+    o: 'Appears after enough transcript',
+    a: 'Draft, clinician review required',
+    p: state.transcriptSource === 'websocket' ? 'End visit for final plan' : 'Appears after final pass',
+  };
+  Object.entries(copy).forEach(([k, text]) => { const el = $(`#soap-${k}`); el.textContent = text; el.className = 'pending'; });
+}
+
+function startProcessTimer() {
+  if (state.processTimer) return;
+  state.processTimer = setInterval(renderProcessing, 1000);
+}
+
+function stopProcessTimer() {
+  if (!state.processTimer) return;
+  clearInterval(state.processTimer);
+  state.processTimer = null;
+}
+
+function setProcessState(label) {
+  state.processState = label;
+  renderProcessing();
+}
+
+function markHeard() {
+  state.lastHeardAt = Date.now();
+  state.chunksSinceInsight = Math.min(state.minChunks, state.chunksSinceInsight + 1);
+  if (state.chunksSinceInsight >= state.minChunks) setProcessState('Enough context collected');
+  else setProcessState('Waiting for enough context');
+}
+
+function markInsightUpdated(label = 'Listening for more context') {
+  state.lastInsightAt = Date.now();
+  state.chunksSinceInsight = 0;
+  setProcessState(label);
+}
+
+function renderProcessing() {
+  const strip = $('#process-strip');
+  if (!strip) return;
+  const thinking = /understanding|drafting/i.test(state.processState);
+  const waiting = /waiting/i.test(state.processState);
+  const done = /ready|complete/i.test(state.processState);
+  strip.dataset.state = thinking ? 'thinking' : waiting ? 'waiting' : done ? 'done' : 'idle';
+  $('#process-state').textContent = state.processState || 'Idle';
+  $('#process-heard').textContent = `Last heard: ${state.lastHeardAt ? relTime(state.lastHeardAt) : 'none'}`;
+  $('#process-context').textContent = `Context: ${Math.min(state.chunksSinceInsight, state.minChunks)} / ${state.minChunks} turns`;
+  $('#process-insight').textContent = `Insight: ${state.lastInsightAt ? relTime(state.lastInsightAt) : 'not yet'}`;
+  $('#intel-updated').textContent = state.lastInsightAt ? `Updated ${relTime(state.lastInsightAt)}` : (state.running ? 'Collecting context' : 'Not started');
+  const pct = state.minChunks ? Math.min(100, Math.round((state.chunksSinceInsight / state.minChunks) * 100)) : 0;
+  $('#process-bar-fill').style.width = thinking ? '100%' : `${pct}%`;
+}
+
+function relTime(ts) {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (sec < 2) return 'just now';
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  return min === 1 ? '1 min ago' : `${min} min ago`;
 }
 
 function onSession(data) {
   state.currentSessionId = data?.sessionId || null;
+  state.minChunks = Number(data?.minChunks || state.minChunks || 4);
+  renderProcessing();
   if (data?.sourceMode === 'websocket') {
     $('#end-visit').hidden = false;
     $('#end-visit').disabled = false;
-    addAction('Real transcript source', 'End the visit manually when the conversation is over.', 'tag-teal');
+    addActivity('Real transcript source', 'End the visit manually when the conversation is over.', 'tag-teal');
   }
 }
 
@@ -518,13 +593,13 @@ async function endVisit() {
   if (!state.running) return;
   $('#end-visit').disabled = true;
   setLive('thinking', 'Ending visit');
-  addAction('End requested', 'Final draft will run after the live transcript stream closes.', 'tag-warn');
+  addActivity('End requested', 'Final draft will run after the live transcript stream closes.', 'tag-warn');
   const suffix = state.currentSessionId ? `?sessionId=${encodeURIComponent(state.currentSessionId)}` : '';
   const result = await fetch(`/api/end-live${suffix}`).then((r) => r.json()).catch((error) => ({ ok: false, error: error.message || String(error) }));
   if (!result.ok) {
     $('#end-visit').disabled = false;
     setLive('live', 'Still listening');
-    addAction('End visit issue', result.error || 'Could not end active stream.', 'tag-danger');
+    addActivity('End visit issue', result.error || 'Could not end active stream.', 'tag-danger');
   }
 }
 
@@ -532,21 +607,23 @@ function onWebsocketStatus(data) {
   const status = data?.status || 'event';
   if (status === 'connecting') {
     setLive('thinking', 'Connecting');
-    addAction('Real transcript source', `Connecting to ${data.backendUrl || 'the live WebSocket'}.`, 'tag-teal');
+    addActivityOnce('Real transcript source', `Connecting to ${data.backendUrl || 'the live WebSocket'}.`, 'tag-teal', 'ws_connecting');
   } else if (status === 'connected') {
     setLive('live', 'Listening');
-    addAction('Real transcript connected', `Listening to ${data.scope || 'global'} stream.`, 'tag-good');
+    addActivityOnce('Real transcript connected', `Listening to ${data.scope || 'global'} stream.`, 'tag-good', 'ws_connected');
   } else if (status === 'conversation_started') {
     setLive('live', 'Conversation started');
   } else if (status === 'transcript_updated' && data.speakers?.length) {
     setLive('live', `Listening: ${data.speakers.join(', ')}`);
   } else if (status === 'error') {
-    addAction('WebSocket issue', data.error || 'Connection issue', 'tag-warn');
+    addActivity('WebSocket issue', data.error || 'Connection issue', 'tag-warn');
   }
 }
 
 function onChunk(c) {
   state.turns += 1;
+  markHeard();
+  addActivityOnce('Transcript received', 'Carry is redacting identifiers before processing.', 'tag-teal', 'transcript_received');
   $('#convo-count').textContent = String(state.turns);
   const stream = $('#convo-stream');
   stream.querySelector('.convo-empty')?.remove();
@@ -720,14 +797,25 @@ function addLive(sel, html, prepend) {
   prepend ? list.prepend(li) : list.appendChild(li);
 }
 
-function addAction(title, body, tag = 'tag') {
+function addAction(title, body, tag = 'tag', status = 'Draft') {
   const stack = $('#action-stack');
   stack.querySelector('.live-empty')?.remove();
   const card = document.createElement('div');
   card.className = 'action-card';
-  card.innerHTML = `<div class="action-card-head"><span class="action-title">${esc(title)}</span><span class="tag ${tag}">Draft</span></div>
+  card.innerHTML = `<div class="action-card-head"><span class="action-title">${esc(title)}</span><span class="tag ${tag}">${esc(status)}</span></div>
     <div class="action-body">${esc(body)}</div>`;
   stack.prepend(card);
+  while (stack.children.length > 7) stack.lastChild.remove();
+}
+
+function addActivity(title, body, tag = 'tag') {
+  addAction(title, body, tag, 'Live');
+}
+
+function addActivityOnce(title, body, tag, key) {
+  if (state.activitySeen.has(key)) return;
+  state.activitySeen.add(key);
+  addActivity(title, body, tag);
 }
 
 function onFinal(output) {
@@ -779,6 +867,8 @@ async function finishVisit(source, payload) {
   state.running = false;
   state.newestSession = payload?.sessionId || null;
   setLive('done', 'Visit complete');
+  setProcessState('Visit complete');
+  stopProcessTimer();
   $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin real visit' : 'Begin next visit'; });
   $('#end-visit').hidden = true;
   $('#end-visit').disabled = false;

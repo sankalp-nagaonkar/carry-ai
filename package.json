@@ -4,10 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "live": "node src/server/dashboard-server.mjs",
-    "doctor:live": "node src/server/dashboard-server.mjs",
-    "doctor:live:sim": "CARRY_TRANSCRIPT_SOURCE=simulator node src/server/dashboard-server.mjs",
-    "doctor:live:real": "CARRY_TRANSCRIPT_SOURCE=websocket node src/server/dashboard-server.mjs",
+    "live": "CARRY_TRANSCRIPT_SOURCE=websocket node src/server/dashboard-server.mjs",
+    "sim": "CARRY_TRANSCRIPT_SOURCE=simulator node src/server/dashboard-server.mjs",
     "lawyer:live": "node src/server/lawyer-dashboard-server.mjs",
     "scalekit:smoke": "node scripts/scalekit-smoke-test.mjs",
     "scalekit:auth:notion": "node scripts/scalekit-auth-link.mjs notion"

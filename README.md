@@ -38,21 +38,20 @@ transcript simulator stands in for the wearable.
 ```bash
 npm install
 cp .env.example .env   # fill in your keys
-npm run live              # Doctor Mode simulator at http://localhost:5173
-npm run doctor:live:sim   # same as above, explicit simulator mode
-npm run doctor:live:real  # Doctor Mode with real POC WebSocket transcript input
-npm run lawyer:live       # Lawyer Mode simulator at http://localhost:5174
+npm run live          # Doctor Mode with real POC WebSocket transcript input
+npm run sim           # Doctor Mode simulator at http://localhost:5173
+npm run lawyer:live   # Lawyer Mode simulator at http://localhost:5174
 ```
 
 ### Doctor transcript sources
 
 Doctor Mode can run from either source:
 
-- **Simulator**: the built-in two-visit medical scenario. Use `npm run live` or `npm run doctor:live:sim`.
-- **Real WebSocket**: the POC global transcript API at `/v4/live/transcripts`. Set `CARRY_BACKEND_WS_URL` if you want a different ngrok URL, then run `npm run doctor:live:real`.
+- **Real WebSocket**: the POC global transcript API at `/v4/live/transcripts`. Set `CARRY_BACKEND_WS_URL` if you want a different ngrok URL, then run `npm run live`.
+- **Simulator**: the built-in two-visit medical scenario. Use `npm run sim`.
 
 ```bash
-CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run doctor:live:real
+CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run live
 ```
 
 The app does not let judges switch sources from inside the UI. The command determines the experience. Simulator mode shows the Visit 1 / Visit 2 scenario controls. Real WebSocket mode shows Sam Altman as the live patient, hides simulator controls, and waits for **End visit** before running the final clinical draft.
@@ -82,9 +81,10 @@ Use **Reset matter** (top right) to clear the matter and replay from scratch.
 ### Options
 
 ```bash
-PORT=8080 npm run live                 # different doctor port
+PORT=8080 npm run live                 # different real doctor port
+PORT=8080 npm run sim                  # different simulated doctor port
 LAWYER_PORT=8081 npm run lawyer:live   # different lawyer port
-SIM_DELAY_MS=2500 npm run lawyer:live  # slow simulator conversation pacing
+SIM_DELAY_MS=2500 npm run sim          # slow simulated doctor conversation pacing
 ```
 
 ## Architecture

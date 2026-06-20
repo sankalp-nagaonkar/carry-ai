@@ -463,13 +463,42 @@ function onChunk(c) {
   const who = String(c.speaker || '').toLowerCase().includes('patient') ? 'patient' : 'doctor';
   const turn = document.createElement('div');
   turn.className = `turn ${who}`;
-  const redactions = (c.redactions || []).length
-    ? `<div class="turn-redact">Privacy filter applied: ${c.redactions.map((r) => esc(r.placeholder)).join(', ')}</div>` : '';
-  turn.innerHTML = `<span class="turn-who">${who === 'patient' ? 'Patient' : 'Doctor'}</span>
-    <div class="turn-text">${esc(c.incomingText)}</div>${redactions}`;
+
+  // Show the full sanitized transcript with redactions highlighted inline.
+  const redactions = c.redactions || [];
+  const body = redactions.length
+    ? `<div class="turn-text">${highlightRedactions(c.sanitizedText, redactions)}</div>
+       <div class="turn-redact">Privacy filter applied: ${redactions.length} item${redactions.length > 1 ? 's' : ''} redacted before processing</div>`
+    : `<div class="turn-text">${esc(c.sanitizedText || c.incomingText)}</div>`;
+
+  turn.innerHTML = `<span class="turn-who">${who === 'patient' ? 'Patient' : 'Doctor'}</span>${body}`;
   stream.appendChild(turn);
   stream.scrollTop = stream.scrollHeight;
 }
+
+// Wrap each placeholder token in the sanitized text with a highlighted pill.
+// The original value is exposed on hover so reviewers can see what was masked.
+function highlightRedactions(text, redactions) {
+  const src = String(text || '');
+  const byPlaceholder = new Map();
+  for (const r of redactions) if (r.placeholder) byPlaceholder.set(r.placeholder, r);
+  const placeholders = [...byPlaceholder.keys()].sort((a, b) => b.length - a.length);
+  if (!placeholders.length) return esc(src);
+  const re = new RegExp(`(${placeholders.map(escapeRegex).join('|')})`, 'g');
+  let out = '';
+  let last = 0;
+  for (const m of src.matchAll(re)) {
+    out += esc(src.slice(last, m.index));
+    const r = byPlaceholder.get(m[0]);
+    const label = (r?.label || 'redacted').replace(/^private_/, '').replace(/_/g, ' ');
+    out += `<mark class="redact" title="${esc(label)} redacted before processing">${esc(m[0])}</mark>`;
+    last = m.index + m[0].length;
+  }
+  out += esc(src.slice(last));
+  return out;
+}
+
+function escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function onIncremental(draft) {
   if (!draft) return;

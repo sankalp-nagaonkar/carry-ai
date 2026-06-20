@@ -3,14 +3,21 @@ import { FastrouterClient } from '../llm/fastrouter-client.mjs';
 import { SQLiteStore } from './sqlite-store.mjs';
 import { PrivacyFilterService } from './privacy-filter-service.mjs';
 import { DoctorBrain } from '../professions/doctor/doctor-brain.mjs';
+import { LawyerBrain } from '../professions/lawyer/lawyer-brain.mjs';
 
 export class CarryBackend {
   constructor({ profession = 'doctor' } = {}) {
+    this.profession = profession;
     this.config = loadConfig({ profession });
     this.store = new SQLiteStore(this.config);
     this.privacy = new PrivacyFilterService(this.config);
     this.llm = new FastrouterClient(this.config);
-    this.doctorBrain = new DoctorBrain({ config: this.config, llm: this.llm, store: this.store });
+    if (profession === 'lawyer') {
+      this.brain = new LawyerBrain({ config: this.config, llm: this.llm, store: this.store });
+    } else {
+      this.brain = new DoctorBrain({ config: this.config, llm: this.llm, store: this.store });
+    }
+    this.doctorBrain = this.brain;
     this.speakerMap = new Map();
   }
 
@@ -64,18 +71,12 @@ export class CarryBackend {
   async processIncremental(sessionId) {
     const session = this.store.getSession(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
-    if (session.profession === 'doctor') {
-      return this.doctorBrain.incrementalPass(sessionId);
-    }
-    throw new Error(`Unsupported profession: ${session.profession}`);
+    return this.brain.incrementalPass(sessionId);
   }
 
   async endSession(sessionId, reason = 'completed') {
-    const session = this.store.endSession(sessionId, reason);
-    if (session.profession === 'doctor') {
-      return this.doctorBrain.finalPass(sessionId);
-    }
-    throw new Error(`Unsupported profession: ${session.profession}`);
+    this.store.endSession(sessionId, reason);
+    return this.brain.finalPass(sessionId);
   }
 
   normalizeSpeaker(sessionId, sourceLabel) {

@@ -35,6 +35,27 @@ export class ScalekitNotionWriter {
     });
     return result.data;
   }
+
+  async createLawyerMatterPage({ sessionId, output }) {
+    if (!this.connector) throw new Error('Missing Notion connection name env');
+    if (!this.parentPageId) throw new Error('Missing lawyer Notion parent_page_id in config');
+
+    const title = `Carry Matter Memo Draft - ${new Date().toISOString().slice(0, 10)} - ${sessionId.slice(0, 8)}`;
+    const blocks = lawyerOutputToBlocks(output);
+    const result = await this.client.actions.executeTool({
+      toolName: 'notion_page_create',
+      identifier: this.identifier,
+      connector: this.connector,
+      toolInput: {
+        parent_page_id: this.parentPageId,
+        properties: {
+          title: { title: [{ text: { content: title } }] },
+        },
+        child_blocks: blocks,
+      },
+    });
+    return result.data;
+  }
 }
 
 function doctorOutputToBlocks(output) {
@@ -74,6 +95,47 @@ function doctorOutputToBlocks(output) {
 
   addH2('Follow-up Plan');
   addPara(JSON.stringify(output.follow_up_plan || {}, null, 2));
+
+  return blocks;
+}
+
+function lawyerOutputToBlocks(output) {
+  const blocks = [];
+  const add = (type, text) => blocks.push({ object: 'block', type, [type]: { rich_text: [{ type: 'text', text: { content: String(text || '') } }] } });
+  const addPara = (text) => add('paragraph', text);
+  const addH2 = (text) => add('heading_2', text);
+  const addH3 = (text) => add('heading_3', text);
+  const memo = output.matter_memo || {};
+
+  addH2('Status');
+  addPara(output.status || 'draft_requires_attorney_review');
+
+  addH2('Matter Memo Draft');
+  addH3('Summary');
+  addPara(memo.summary?.draft || 'None');
+  addH3('Facts');
+  addPara(memo.facts?.draft || 'None');
+  addH3('Issues');
+  addPara(memo.issues?.draft || 'None');
+  addH3('Analysis');
+  addPara(memo.analysis?.draft || 'None');
+  addH3('Next Steps');
+  addPara(memo.next_steps?.draft || 'None');
+
+  addH2('Issue Spotting');
+  addPara((output.issue_spotting || []).map((x) => `- ${x.issue} (${x.strength})`).join('\n') || 'None');
+
+  addH2('Deadline Tracking');
+  addPara(JSON.stringify(output.deadline_tracking || {}, null, 2));
+
+  addH2('Conflict Screen');
+  addPara(JSON.stringify(output.conflict_screen || {}, null, 2));
+
+  addH2('Next Steps');
+  addPara((output.next_steps || []).map((x) => `- ${x.step} (${x.owner}, ${x.due_text || 'no due date'})`).join('\n') || 'None');
+
+  addH2('Client Summary Draft');
+  addPara(output.client_summary?.draft || 'None');
 
   return blocks;
 }

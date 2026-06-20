@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carry Lawyer Mode</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="rail">
+        <div class="rail-brand">
+          <span class="rail-logo" aria-hidden="true">C</span>
+          <span class="rail-word">Carry</span>
+        </div>
+
+        <nav class="rail-nav" aria-label="Primary">
+          <button class="rail-link active" data-page="today">
+            <span class="rail-link-label">Today</span>
+            <span class="rail-link-hint">Matter pre-read</span>
+          </button>
+          <button class="rail-link" data-page="visit">
+            <span class="rail-link-label">Live Meeting</span>
+            <span class="rail-link-hint">Active conversation</span>
+          </button>
+          <button class="rail-link" data-page="profile">
+            <span class="rail-link-label">Matter</span>
+            <span class="rail-link-hint">Longitudinal file</span>
+          </button>
+          <button class="rail-link" data-page="timeline">
+            <span class="rail-link-label">Timeline</span>
+            <span class="rail-link-hint">Matter history</span>
+          </button>
+          <button class="rail-link" data-page="graph">
+            <span class="rail-link-label">Knowledge Graph</span>
+            <span class="rail-link-hint">Parties and issues</span>
+          </button>
+        </nav>
+
+        <div class="rail-foot">
+          <p class="rail-foot-title">Lawyer Mode</p>
+          <p class="rail-foot-copy">AI prepares. Attorney approves. No automatic filing or advice.</p>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <section class="view active" id="view-today">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Tuesday matters</p>
+              <h1>Good morning, Maya</h1>
+            </div>
+            <div class="head-actions">
+              <div class="scenario-picker" id="scenario-picker" role="group" aria-label="Demo scenario">
+                <span class="scenario-label">Demo</span>
+                <button class="scenario-opt active" data-scenario="meeting1">Meeting 1</button>
+                <button class="scenario-opt" data-scenario="meeting2">Meeting 2</button>
+              </div>
+              <button class="btn-ghost" id="reset-demo">Reset matter</button>
+              <button class="btn-primary launch-visit">Begin next meeting</button>
+            </div>
+          </header>
+
+          <div class="today-grid">
+            <div class="today-main">
+              <section class="briefing" id="briefing">
+                <div class="briefing-head">
+                  <div class="patient-id">
+                    <span class="avatar" id="brief-avatar">EC</span>
+                    <div>
+                      <h2 id="brief-name">Employment client</h2>
+                      <p class="muted" id="brief-meta">MAT-1042 · Employment · 09:30</p>
+                    </div>
+                  </div>
+                  <span class="tag tag-live" id="brief-badge">New matter</span>
+                </div>
+
+                <p class="briefing-lead" id="brief-lead">Matter briefing, generated from prior meetings and current context.</p>
+
+                <div class="carried-strip" id="carried-strip" hidden>
+                  <span class="block-label">Carried forward by Carry</span>
+                  <ul id="carried-list" class="chiplist"></ul>
+                </div>
+
+                <div class="briefing-cols">
+                  <div class="brief-block">
+                    <p class="block-label">Last meeting</p>
+                    <p id="brief-last" class="block-body"></p>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Deadlines</p>
+                    <ul id="brief-deadlines" class="chiplist danger"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Parties</p>
+                    <ul id="brief-parties" class="chiplist"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Issues</p>
+                    <ul id="brief-issues" class="chiplist"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Unresolved</p>
+                    <ul id="brief-unresolved" class="dotlist"></ul>
+                  </div>
+                  <div class="brief-block">
+                    <p class="block-label">Suggested agenda</p>
+                    <ol id="brief-agenda" class="agenda"></ol>
+                  </div>
+                </div>
+              </section>
+
+              <section class="schedule">
+                <div class="section-head">
+                  <h3>Today's meetings</h3>
+                  <span class="muted-sm" id="schedule-count"></span>
+                </div>
+                <ul class="appt-list" id="appt-list"></ul>
+              </section>
+            </div>
+
+            <aside class="today-side">
+              <section class="attention">
+                <div class="section-head"><h3>Needs attention</h3></div>
+                <ul class="attention-list" id="attention-list"></ul>
+              </section>
+
+              <section class="updates">
+                <div class="section-head"><h3>Recent updates</h3></div>
+                <ul class="update-list" id="update-list">
+                  <li class="update-empty">Updates from meetings appear here as Carry understands them.</li>
+                </ul>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="view-visit">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Live meeting · <span id="visit-patient">Employment client</span> · <span id="visit-scenario">Meeting</span></p>
+              <h1>Conversation</h1>
+            </div>
+            <div class="visit-controls">
+              <span class="live-dot" id="live-dot" data-state="idle"><span></span><em id="live-label">Idle</em></span>
+              <button class="btn-primary launch-visit" id="visit-start">Start meeting</button>
+            </div>
+          </header>
+
+          <div class="visit-grid">
+            <section class="convo">
+              <div class="convo-head">
+                <h3>Live transcript</h3>
+                <span class="muted-sm"><span id="convo-count">0</span> exchanges</span>
+              </div>
+              <div class="convo-stream" id="convo-stream">
+                <p class="convo-empty">Start the meeting to see it unfold. Carry quietly extracts facts, issues, and deadlines as attorney and client speak.</p>
+              </div>
+            </section>
+
+            <section class="intel">
+              <div class="intel-head">
+                <h3>Legal intelligence</h3>
+                <span class="muted-sm">Updated live</span>
+              </div>
+
+              <div class="intel-scroll" id="intel-scroll">
+                <div class="intel-card" id="card-memo">
+                  <div class="intel-card-head">
+                    <p class="block-label">Matter memo draft</p>
+                    <span class="tag" id="memo-progress">Listening</span>
+                  </div>
+                  <dl class="soap-grid" id="memo-grid">
+                    <div><dt>F</dt><dd id="memo-f" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>I</dt><dd id="memo-i" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>A</dt><dd id="memo-a" class="pending">Awaiting conversation</dd></div>
+                    <div><dt>N</dt><dd id="memo-n" class="pending">Awaiting conversation</dd></div>
+                  </dl>
+                </div>
+
+                <div class="intel-card">
+                  <div class="intel-card-head"><p class="block-label">Key facts</p></div>
+                  <ul class="live-list" id="live-facts"><li class="live-empty">None detected yet</li></ul>
+                </div>
+
+                <div class="intel-card" id="card-deadline">
+                  <div class="intel-card-head"><p class="block-label">Deadline tracking</p></div>
+                  <ul class="live-list" id="live-deadlines"><li class="live-empty">No deadlines detected</li></ul>
+                </div>
+
+                <div class="intel-card" id="card-issues">
+                  <div class="intel-card-head"><p class="block-label">Issue spotting</p></div>
+                  <ul class="live-list" id="live-issues"><li class="live-empty">No issues spotted yet</li></ul>
+                </div>
+
+                <div class="intel-card">
+                  <div class="intel-card-head"><p class="block-label">Missing information</p></div>
+                  <ul class="live-list" id="live-missing"><li class="live-empty">Memo looks complete so far</li></ul>
+                </div>
+              </div>
+            </section>
+
+            <aside class="sidebar-actions">
+              <div class="intel-head"><h3>Drafted actions</h3></div>
+              <div class="action-stack" id="action-stack">
+                <p class="live-empty">Memo, calendar, and conflict-check drafts appear here as the meeting progresses.</p>
+              </div>
+            </aside>
+          </div>
+
+          <section class="review" id="review" hidden>
+            <div class="review-head">
+              <div>
+                <h2>Matter ready for review</h2>
+                <p class="muted">AI prepared this draft. Attorney review required. Nothing is filed or sent automatically.</p>
+              </div>
+              <button class="btn-primary" id="approve-all">Approve and sync</button>
+            </div>
+            <div class="review-grid" id="review-grid"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-profile">
+          <header class="view-head">
+            <div class="patient-id large">
+              <span class="avatar lg">EC</span>
+              <div>
+                <h1>Employment client matter</h1>
+                <p class="muted">MAT-1042 · Employment · Responsible attorney: Maya Chen</p>
+              </div>
+            </div>
+            <span class="tag tag-danger" id="profile-risk">Deadline review</span>
+          </header>
+          <div class="profile-grid" id="profile-grid"></div>
+        </section>
+
+        <section class="view" id="view-timeline">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Employment client matter</p>
+              <h1>Matter timeline</h1>
+            </div>
+          </header>
+          <div class="timeline" id="timeline"></div>
+        </section>
+
+        <section class="view" id="view-graph">
+          <header class="view-head">
+            <div>
+              <p class="kicker">Employment client matter</p>
+              <h1>Knowledge graph</h1>
+            </div>
+            <span class="muted-sm" id="graph-status">Baseline understanding</span>
+          </header>
+          <div class="graph-wrap">
+            <svg class="graph-canvas" id="graph-canvas" viewBox="0 0 1000 680" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Matter knowledge graph"></svg>
+            <aside class="graph-detail" id="graph-detail">
+              <p class="block-label">Node detail</p>
+              <p class="muted graph-detail-empty">Select any node to trace where the information came from.</p>
+            </aside>
+            <div class="graph-legend" id="graph-legend"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

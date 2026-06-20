@@ -1,0 +1,67 @@
+profession: lawyer
+
+llm:
+  model: google/gemini-3.5-flash
+  temperature: 0.05
+  max_tokens: 7000
+
+prompts:
+  incremental_pass: prompts/lawyer/incremental_pass.md
+  final_pass: prompts/lawyer/final_pass.md
+  memory_update: prompts/lawyer/memory_update.md
+  action_planner: prompts/lawyer/action_planner.md
+
+privacy:
+  enabled: true
+  preserve_legal_entities: true
+  preserve_relative_dates: true
+  redact_direct_identifiers: true
+  date_policy: preserve_matter_dates_redact_identity_dates
+
+memory:
+  enabled: true
+  agent_decides_what_to_store: true
+  store_matter_timeline: true
+  store_deadlines: true
+  store_parties: true
+  store_issues: true
+  store_objectives: true
+  store_next_steps: true
+  blocked_types:
+    - client_identifier
+    - contact_info
+    - private_person
+    - private_phone
+    - private_email
+    - private_address
+    - private_date
+    - direct_identifier
+  allowed_types:
+    - meeting_summary
+    - key_fact
+    - legal_issue
+    - opposing_party
+    - deadline
+    - statute_or_authority
+    - client_objective
+    - next_step
+    - conflict_check_item
+    - unresolved_question
+    - risk_context
+
+artifacts:
+  generate:
+    - speaker_role_inference
+    - legal_fact_extraction
+    - matter_memo
+    - issue_spotting
+    - deadline_tracking
+    - conflict_screen
+    - missing_information
+    - next_steps
+    - billing_summary
+    - action_plan
+
+tools:
+  notion:
+    parent_page_id: 385ed79b-5001-801c-bc50-d4dcae27c1ee

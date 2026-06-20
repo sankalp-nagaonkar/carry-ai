@@ -6,6 +6,7 @@
   "scripts": {
     "live": "node src/server/dashboard-server.mjs",
     "doctor:live": "node src/server/dashboard-server.mjs",
+    "lawyer:live": "node src/server/lawyer-dashboard-server.mjs",
     "scalekit:smoke": "node scripts/scalekit-smoke-test.mjs",
     "scalekit:auth:notion": "node scripts/scalekit-auth-link.mjs notion"
   },

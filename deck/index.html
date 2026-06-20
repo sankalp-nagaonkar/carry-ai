@@ -126,28 +126,34 @@ p{margin:0;}
 .jrow .jb{font-size:15.5px;color:var(--ink-2);line-height:1.45;}
 .jrow .jb b{color:var(--ink);font-weight:650;}
 
-/* pipeline v2: data trace */
-.trace{display:grid;grid-template-columns:repeat(5,1fr);column-gap:14px;flex:1;align-content:start;}
-.tcol{display:flex;flex-direction:column;gap:14px;min-width:0;}
-.thead{display:flex;flex-direction:column;gap:9px;position:relative;}
-.thead .sn{width:30px;height:30px;border-radius:9px;background:var(--accent-wash);color:var(--accent-ink);font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;}
-.thead h4{margin:0;font-size:15.5px;font-weight:740;letter-spacing:-0.01em;}
-.thead p{font-size:12.5px;color:var(--ink-3);line-height:1.4;}
-.trace .tcol:not(:last-child) .thead::after{content:"";position:absolute;top:15px;left:38px;right:-15px;height:2px;background:linear-gradient(90deg,var(--line-2),var(--line));}
-.trace .tcol:not(:last-child) .thead::before{content:"";position:absolute;top:11px;right:-16px;width:9px;height:9px;border-top:2px solid var(--line);border-right:2px solid var(--line);transform:rotate(45deg);z-index:1;}
-.dchip{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:13px 14px;box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:8px;min-height:132px;}
-.dchip .dk{font-size:10.5px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--faint);}
-.dchip .quote{font-size:12.5px;line-height:1.5;color:var(--ink);}
-.dchip .quote .nm{color:var(--bad);text-decoration:line-through;text-decoration-color:oklch(56% 0.142 27 / 0.55);}
-.dchip .quote .mask{background:var(--bad-wash);color:var(--bad);border-radius:5px;padding:0 5px;font-size:11.5px;font-weight:650;}
-.dchip .pills{display:flex;flex-wrap:wrap;gap:6px;}
-.dchip .pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;padding:3px 9px;border-radius:999px;background:var(--raised);color:var(--ink-2);border:1px solid var(--line);}
-.dchip .pill b{font-weight:750;color:var(--ink);}
-.dchip .pill.bad{background:var(--bad-wash);color:var(--bad);border-color:transparent;}
-.dchip .pill.warn{background:var(--warn-wash);color:var(--warn);border-color:transparent;}
-.dchip .pill.good{background:var(--good-wash);color:var(--good);border-color:transparent;}
-.dchip .pill.teal{background:var(--teal-wash);color:var(--teal);border-color:transparent;}
-.dchip .pill.accent{background:var(--accent-wash);color:var(--accent-ink);border-color:transparent;}
+/* pipeline v2: data trace, 2-row card grid */
+.trace{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:18px;flex:1;min-height:0;}
+.tcard{background:var(--panel-2);border:1px solid var(--line);border-radius:15px;padding:18px 20px;display:flex;flex-direction:column;gap:11px;position:relative;overflow:hidden;}
+.tcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent);}
+.tcard.c-bad::before{background:var(--bad);}
+.tcard.c-teal::before{background:var(--teal);}
+.tcard.c-warn::before{background:var(--warn);}
+.tcard.c-good::before{background:var(--good);}
+.tcard .top{display:flex;align-items:center;gap:11px;}
+.tcard .sn{width:28px;height:28px;border-radius:8px;background:var(--paper);border:1px solid var(--line);color:var(--ink-2);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;}
+.tcard h4{margin:0;font-size:15.5px;font-weight:760;letter-spacing:-0.01em;}
+.tcard .dk{font-size:10px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--faint);}
+.tcard .quote{font-size:13px;line-height:1.55;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.tcard .quote.plain{background:transparent;border:none;padding:0;color:var(--ink-2);font-size:12.5px;}
+.tcard .mask{background:var(--bad-wash);color:var(--bad);border-radius:5px;padding:0 5px;font-size:12px;font-weight:700;}
+.tcard .pills{display:flex;flex-wrap:wrap;gap:7px;}
+.tcard .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:650;padding:4px 11px;border-radius:999px;background:var(--paper);color:var(--ink-2);border:1px solid var(--line);}
+.tcard .pill b{font-weight:760;color:var(--ink);}
+.tcard .pill.bad{background:var(--bad-wash);color:var(--bad);border-color:transparent;}
+.tcard .pill.warn{background:var(--warn-wash);color:var(--warn);border-color:transparent;}
+.tcard .pill.good{background:var(--good-wash);color:var(--good);border-color:transparent;}
+.tcard .pill.teal{background:var(--teal-wash);color:var(--teal);border-color:transparent;}
+.tcard .pill.accent{background:var(--accent-wash);color:var(--accent-ink);border-color:transparent;}
+.tcard.result{background:var(--ink);border:none;justify-content:center;gap:7px;}
+.tcard.result::before{display:none;}
+.tcard.result .dk{color:oklch(72% 0.02 257);}
+.tcard.result h4{color:var(--paper);font-size:17px;line-height:1.3;}
+.tcard.result p{color:oklch(80% 0.015 257);font-size:13px;line-height:1.5;margin:0;}
 
 /* screenshot slides */
 .shot-slide .pad{padding:42px 52px 48px;}
@@ -330,58 +336,48 @@ mark.safe{background:var(--bad-wash);color:var(--bad);border-radius:5px;padding:
       <div class="head">
         <span class="kicker">How it works</span>
         <h2>Follow one sentence through the pipeline.</h2>
-        <p class="lead" style="font-size:17px;">A single line from the visit, traced from spoken words to a reviewed work action.</p>
       </div>
       <div class="trace">
-        <div class="tcol">
-          <div class="thead"><span class="sn">1</span><h4>Capture</h4><p>Wearable streams transcript chunks.</p></div>
-          <div class="dchip">
-            <span class="dk">Heard from patient</span>
-            <div class="quote">“I am Anaya Mehta. Amoxicillin should help the throat.”</div>
-            <div class="pills"><span class="pill accent">Streaming audio</span></div>
+        <div class="tcard">
+          <div class="top"><span class="sn">1</span><h4>Capture</h4></div>
+          <span class="dk">Heard from patient</span>
+          <div class="quote">“I am Anaya Mehta. Amoxicillin should help the throat.”</div>
+        </div>
+        <div class="tcard c-bad">
+          <div class="top"><span class="sn">2</span><h4>Privacy filter</h4></div>
+          <span class="dk">Sent for processing</span>
+          <div class="quote">“I am <span class="mask">[PERSON_1]</span>. Amoxicillin should help the throat.”</div>
+        </div>
+        <div class="tcard c-teal">
+          <div class="top"><span class="sn">3</span><h4>Understand live</h4></div>
+          <span class="dk">Extracted</span>
+          <div class="pills">
+            <span class="pill teal">Medication <b>amoxicillin</b></span>
+            <span class="pill bad">Penicillin allergy on file</span>
           </div>
         </div>
-        <div class="tcol">
-          <div class="thead"><span class="sn">2</span><h4>Privacy filter</h4><p>Identifiers masked on device.</p></div>
-          <div class="dchip">
-            <span class="dk">Sent for processing</span>
-            <div class="quote">“I am <span class="mask">[PERSON_1]</span>. Amoxicillin should help the throat.”</div>
-            <div class="pills"><span class="pill bad">Name removed</span><span class="pill">Clinical terms kept</span></div>
+        <div class="tcard c-warn">
+          <div class="top"><span class="sn">4</span><h4>Draft</h4></div>
+          <span class="dk">Drafted for review</span>
+          <div class="pills">
+            <span class="pill warn">Switch to azithromycin</span>
+            <span class="pill teal">SOAP note</span>
+            <span class="pill">ICD-10 J02.9</span>
           </div>
         </div>
-        <div class="tcol">
-          <div class="thead"><span class="sn">3</span><h4>Understand live</h4><p>Tracks meds and safety.</p></div>
-          <div class="dchip">
-            <span class="dk">Extracted</span>
-            <div class="pills">
-              <span class="pill teal">Medication <b>amoxicillin</b></span>
-              <span class="pill bad">Conflict: penicillin allergy</span>
-            </div>
-            <div class="quote" style="color:var(--ink-2)">Matched against memory from the prior visit.</div>
+        <div class="tcard c-good">
+          <div class="top"><span class="sn">5</span><h4>Remember and act</h4></div>
+          <span class="dk">After sign-off</span>
+          <div class="pills">
+            <span class="pill good">Synced to Notion</span>
+            <span class="pill good">Follow-up booked</span>
+            <span class="pill accent">Allergy carried forward</span>
           </div>
         </div>
-        <div class="tcol">
-          <div class="thead"><span class="sn">4</span><h4>Draft</h4><p>Note, coding, follow-up.</p></div>
-          <div class="dchip">
-            <span class="dk">Drafted for review</span>
-            <div class="pills">
-              <span class="pill warn">Switch to azithromycin</span>
-              <span class="pill teal">SOAP note</span>
-              <span class="pill">ICD-10 J02.9</span>
-            </div>
-            <div class="quote" style="color:var(--ink-2)">Marked clinician review required.</div>
-          </div>
-        </div>
-        <div class="tcol">
-          <div class="thead"><span class="sn">5</span><h4>Remember and act</h4><p>Store, sync, carry forward.</p></div>
-          <div class="dchip">
-            <span class="dk">After sign-off</span>
-            <div class="pills">
-              <span class="pill good">Note synced to Notion</span>
-              <span class="pill good">Follow-up scheduled</span>
-              <span class="pill accent">Allergy carried forward</span>
-            </div>
-          </div>
+        <div class="tcard result">
+          <span class="dk">Net result</span>
+          <h4>A risky prescription, caught and corrected before sign-off.</h4>
+          <p>The note is drafted, the follow-up is ready, and the allergy is remembered for next time.</p>
         </div>
       </div>
     </div>

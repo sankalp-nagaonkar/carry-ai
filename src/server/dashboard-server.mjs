@@ -92,7 +92,50 @@ async function handleLive(req, res, url) {
     } : null,
   });
 
-  const state = { chunksSincePass: 0, incrementalCount: 0 };
+  const state = {
+    chunksSincePass: 0,
+    incrementalCount: 0,
+    incrementalRunning: false,
+    incrementalQueued: false,
+    incrementalPromise: Promise.resolve(),
+  };
+
+  const scheduleIncremental = (reason = 'threshold') => {
+    if (closed) return;
+    if (state.incrementalRunning) {
+      state.incrementalQueued = true;
+      emit('incremental_queued', { reason, chunksSincePass: state.chunksSincePass });
+      return;
+    }
+
+    const pass = ++state.incrementalCount;
+    const chunkSnapshot = state.chunksSincePass;
+    state.chunksSincePass = 0;
+    state.incrementalRunning = true;
+    emit('incremental_started', { pass, reason, chunks: chunkSnapshot });
+
+    state.incrementalPromise = (async () => {
+      try {
+        const draft = await carry.processIncremental(session.session_id);
+        emit('incremental', { pass, draft });
+      } catch (error) {
+        // A failed incremental pass must not abort the visit. The final pass is
+        // authoritative for the record. Surface it quietly and continue.
+        emit('incremental', { pass, draft: null, note: 'incremental skipped' });
+      } finally {
+        state.incrementalRunning = false;
+        if (!closed && (state.incrementalQueued || state.chunksSincePass >= minChunks)) {
+          state.incrementalQueued = false;
+          scheduleIncremental('queued_while_processing');
+        }
+      }
+    })();
+  };
+
+  const waitForIncrementalIdle = async () => {
+    while (state.incrementalRunning) await state.incrementalPromise.catch(() => {});
+  };
+
   const ingestAndMaybeProcess = async (chunk) => {
     if (closed) return;
     const result = carry.ingestChunk({ sessionId: session.session_id, ...chunk });
@@ -107,19 +150,7 @@ async function handleLive(req, res, url) {
       sourceMode,
     });
 
-    if (state.chunksSincePass >= minChunks) {
-      state.incrementalCount++;
-      emit('incremental_started', { pass: state.incrementalCount });
-      try {
-        const draft = await carry.processIncremental(session.session_id);
-        emit('incremental', { pass: state.incrementalCount, draft });
-      } catch (error) {
-        // A failed incremental pass must not abort the visit. The final pass is
-        // authoritative for the record. Surface it quietly and continue.
-        emit('incremental', { pass: state.incrementalCount, draft: null, note: 'incremental skipped' });
-      }
-      state.chunksSincePass = 0;
-    }
+    if (state.chunksSincePass >= minChunks) scheduleIncremental('enough_context');
   };
 
   try {
@@ -134,6 +165,7 @@ async function handleLive(req, res, url) {
       await streamChunks(getDoctorScenario(scenario), ingestAndMaybeProcess, { delayMs });
     }
 
+    await waitForIncrementalIdle();
     if (closed) return;
     emit('final_started', {});
     const finalOutput = await carry.endSession(session.session_id, 'dashboard_live_completed');

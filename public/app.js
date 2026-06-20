@@ -483,6 +483,7 @@ function startVisit() {
   source.addEventListener('websocket_status', (e) => onWebsocketStatus(parse(e)));
   source.addEventListener('websocket_complete', (e) => { addActivity('Live transcript complete', `Capture ended: ${parse(e).reason || 'completed'}.`, 'tag-teal'); setProcessState('Drafting final'); });
   source.addEventListener('incremental_started', () => { setLive('thinking', 'Understanding'); setProcessState('Understanding now'); addActivity('Understanding pass started', 'Carry has enough context to update the draft.', 'tag-teal'); });
+  source.addEventListener('incremental_queued', () => { setProcessState('Still listening during processing'); });
   source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); markInsightUpdated(); });
   source.addEventListener('final_started', () => { setLive('thinking', 'Drafting note'); setProcessState('Drafting final'); addActivity('Final drafting started', 'Carry is preparing the review draft.', 'tag-warn'); });
   source.addEventListener('final', (e) => { onFinal(parse(e).output); markInsightUpdated('Draft ready'); });

@@ -460,24 +460,63 @@ function onChunk(c) {
   $('#convo-count').textContent = String(state.turns);
   const stream = $('#convo-stream');
   stream.querySelector('.convo-empty')?.remove();
-  const who = String(c.speaker || '').toLowerCase().includes('patient') ? 'patient' : 'doctor';
+  const who = speakerRole(c.speaker);
   const turn = document.createElement('div');
   turn.className = `turn ${who}`;
 
-  // Show the full sanitized transcript with redactions highlighted inline.
   const redactions = c.redactions || [];
-  const body = redactions.length
-    ? `<div class="turn-text">${highlightRedactions(c.sanitizedText, redactions)}</div>
-       <div class="turn-redact">Privacy filter applied: ${redactions.length} item${redactions.length > 1 ? 's' : ''} redacted before processing</div>`
-    : `<div class="turn-text">${esc(c.sanitizedText || c.incomingText)}</div>`;
+  const original = c.incomingText || c.sanitizedText || '';
+  const sanitized = c.sanitizedText || original;
+  const hasRedactions = redactions.length > 0;
 
-  turn.innerHTML = `<span class="turn-who">${who === 'patient' ? 'Patient' : 'Doctor'}</span>${body}`;
+  // Show both the captured audio transcript and the sanitized version that is
+  // actually sent for processing. When nothing was redacted, the two are identical
+  // so we only show one block to keep the stream calm.
+  const body = hasRedactions
+    ? `<div class="turn-block">
+         <span class="turn-tag raw">Captured</span>
+         <div class="turn-text">${highlightOriginals(original, redactions)}</div>
+       </div>
+       <div class="turn-block">
+         <span class="turn-tag safe">Sent for processing</span>
+         <div class="turn-text">${highlightRedactions(sanitized, redactions)}</div>
+       </div>
+       <div class="turn-redact">${redactions.length} item${redactions.length > 1 ? 's' : ''} redacted before anything leaves the device</div>`
+    : `<div class="turn-text">${esc(sanitized)}</div>`;
+
+  turn.innerHTML = `<span class="turn-who">${who === 'patient' ? 'Patient' : 'Clinician'}</span>${body}`;
   stream.appendChild(turn);
   stream.scrollTop = stream.scrollHeight;
 }
 
+// Person 1 leads the consult (clinician), Person 2 is the patient. Fall back to a
+// keyword check for any other labeling scheme.
+function speakerRole(speaker) {
+  const s = String(speaker || '').toLowerCase();
+  if (s.includes('patient') || /\b(person\s*2|speaker\s*2|p2|s2)\b/.test(s)) return 'patient';
+  if (s.includes('doctor') || s.includes('clinician') || /\b(person\s*1|speaker\s*1|p1|s1)\b/.test(s)) return 'doctor';
+  return 'doctor';
+}
+
+// In the captured block, highlight the original private values that will be masked.
+function highlightOriginals(text, redactions) {
+  const src = String(text || '');
+  const values = redactions.map((r) => r.value).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!values.length) return esc(src);
+  const re = new RegExp(`(${values.map(escapeRegex).join('|')})`, 'g');
+  const labelFor = new Map(redactions.map((r) => [r.value, (r.label || 'redacted').replace(/^private_/, '').replace(/_/g, ' ')]));
+  let out = '';
+  let last = 0;
+  for (const m of src.matchAll(re)) {
+    out += esc(src.slice(last, m.index));
+    out += `<mark class="redact raw" title="${esc(labelFor.get(m[0]) || 'redacted')} will be masked">${esc(m[0])}</mark>`;
+    last = m.index + m[0].length;
+  }
+  out += esc(src.slice(last));
+  return out;
+}
+
 // Wrap each placeholder token in the sanitized text with a highlighted pill.
-// The original value is exposed on hover so reviewers can see what was masked.
 function highlightRedactions(text, redactions) {
   const src = String(text || '');
   const byPlaceholder = new Map();

@@ -261,7 +261,14 @@ h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 .turn-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; padding: 9px 13px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
 .turn.doctor .turn-text { background: var(--accent-wash); border-color: transparent; }
 .turn-redact { font-size: 11px; color: var(--faint); margin-top: 2px; }
+.turn-block { display: flex; flex-direction: column; gap: 3px; }
+.turn-block + .turn-block { margin-top: 6px; }
+.turn-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); display: inline-flex; align-items: center; gap: 5px; }
+.turn-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.turn-tag.raw::before { background: var(--bad); }
+.turn-tag.safe::before { background: var(--good); }
 .turn-text mark.redact { background: var(--bad-wash); color: var(--bad); border: 1px solid color-mix(in oklab, var(--bad) 35%, transparent); border-radius: 5px; padding: 0 5px; font-size: 12px; font-weight: 500; letter-spacing: 0.01em; cursor: help; white-space: nowrap; }
+.turn-text mark.redact.raw { background: transparent; text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--bad) 60%, transparent); border-style: dashed; }
 
 .intel { padding: 18px 18px 6px; }
 .intel-scroll { display: flex; flex-direction: column; gap: 12px; max-height: 560px; overflow-y: auto; padding-bottom: 14px; padding-right: 4px; }

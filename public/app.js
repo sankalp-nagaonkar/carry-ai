@@ -507,7 +507,7 @@ function resetVisit() {
   $('#live-meds').innerHTML = '<li class="live-empty">Medication signals appear here</li>';
   $('#live-safety').innerHTML = '<li class="live-empty">No safety signal yet</li>';
   $('#live-missing').innerHTML = '<li class="live-empty">Questions appear after enough context</li>';
-  $('#action-stack').innerHTML = '<p class="live-empty">Live system events appear here.</p>';
+  $('#action-stack') && ($('#action-stack').innerHTML = '<p class="live-empty">Live system events appear here.</p>');
   $('#end-visit').hidden = true;
   $('#end-visit').disabled = false;
   $('#review').hidden = true;
@@ -799,6 +799,7 @@ function addLive(sel, html, prepend) {
 
 function addAction(title, body, tag = 'tag', status = 'Draft') {
   const stack = $('#action-stack');
+  if (!stack) return;
   stack.querySelector('.live-empty')?.remove();
   const card = document.createElement('div');
   card.className = 'action-card';

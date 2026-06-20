@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { ScalekitClient } from '@scalekit-sdk/node';
 
 export class ScalekitNotionWriter {
@@ -21,81 +19,12 @@ export class ScalekitNotionWriter {
     if (!this.connector) throw new Error('Missing Notion connection name env');
     if (!this.parentPageId) throw new Error('Missing doctor Notion parent_page_id in config');
 
-    const patientPage = await this.getOrCreatePatientPage(patientName);
-    if (!patientPage?.id) throw new Error(`Could not resolve Notion patient page for ${patientName}`);
-
-    const title = `${formatHumanDateTime(visitAt)} Visit Note`;
+    const title = `${patientName} - ${formatHumanDateTime(visitAt)} Visit Note`;
     const markdown = doctorOutputToMarkdown({ output, sessionId, patientName, visitAt });
-    const result = await this.createNotionPage({ parentPageId: patientPage.id, title });
+    const result = await this.createNotionPage({ parentPageId: this.parentPageId, title });
     if (!result?.id) throw new Error(`Notion visit page was created but no page id was returned for ${title}`);
     await this.appendNotionBlocks({ blockId: result.id, blocks: markdownToNotionBlocks(markdown) });
-    return { ...result, patientPage, markdownTitle: title };
-  }
-
-  async getOrCreatePatientPage(patientName) {
-    const registry = this.readPatientRegistry();
-    const registryKey = `${this.parentPageId}:${patientName.toLowerCase()}`;
-    if (registry[registryKey]) {
-      const cached = await this.validatePatientPage(registry[registryKey], patientName).catch(() => null);
-      if (cached?.id) return { ...cached, source: 'local_registry' };
-      delete registry[registryKey];
-      this.writePatientRegistry(registry);
-    }
-
-    const found = await this.findPatientPage(patientName).catch(() => null);
-    if (found?.id) {
-      registry[registryKey] = normalizeNotionId(found.id);
-      this.writePatientRegistry(registry);
-      return { ...found, source: 'notion_search' };
-    }
-
-    const created = await this.createNotionPage({ parentPageId: this.parentPageId, title: patientName });
-    if (!created.id) throw new Error(`Notion patient page was created but no page id was returned for ${patientName}`);
-    await this.appendNotionBlocks({
-      blockId: created.id,
-      blocks: [{ type: 'paragraph', text: 'Carry patient record. Visit notes appear as timestamped subpages.' }],
-    });
-    registry[registryKey] = normalizeNotionId(created.id);
-    this.writePatientRegistry(registry);
-    return { id: normalizeNotionId(created.id), title: patientName, source: 'created' };
-  }
-
-  async validatePatientPage(pageId, patientName) {
-    const result = await this.client.actions.executeTool({
-      toolName: 'notion_page_get',
-      identifier: this.identifier,
-      connector: this.connector,
-      toolInput: { page_id: normalizeNotionId(pageId) },
-    });
-    const title = notionTitle(result.data);
-    const parentPageId = notionParentPageId(result.data);
-    if (title?.trim().toLowerCase() !== patientName.trim().toLowerCase()) return null;
-    if (normalizeNotionId(parentPageId) !== normalizeNotionId(this.parentPageId)) return null;
-    return { id: normalizeNotionId(pageId), title, parentPageId: normalizeNotionId(parentPageId) };
-  }
-
-  async findPatientPage(patientName) {
-    let lastError;
-    for (const toolName of ['notion_data_fetch', 'notion_search', 'notion_page_search']) {
-      try {
-        const result = await this.client.actions.executeTool({
-          toolName,
-          identifier: this.identifier,
-          connector: this.connector,
-          toolInput: { query: patientName, page_size: 10 },
-        });
-        const candidates = extractNotionSearchResults(result.data)
-          .filter((p) => p.title?.trim().toLowerCase() === patientName.trim().toLowerCase() && p.id);
-        for (const candidate of candidates) {
-          const validated = await this.validatePatientPage(candidate.id, patientName).catch(() => null);
-          if (validated?.id) return validated;
-        }
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    if (lastError) throw lastError;
-    return null;
+    return { ...result, parentPageId: normalizeNotionId(this.parentPageId), markdownTitle: title };
   }
 
   async createNotionPage({ parentPageId, title, blocks = null }) {
@@ -132,20 +61,6 @@ export class ScalekitNotionWriter {
     return result.data;
   }
 
-  registryPath() {
-    return path.join(this.config.rootDir || process.cwd(), 'data', 'notion-patient-pages.json');
-  }
-
-  readPatientRegistry() {
-    try { return JSON.parse(fs.readFileSync(this.registryPath(), 'utf8')); } catch { return {}; }
-  }
-
-  writePatientRegistry(registry) {
-    const file = this.registryPath();
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(registry, null, 2));
-  }
-
   async createLawyerMatterPage({ sessionId, output }) {
     if (!this.connector) throw new Error('Missing Notion connection name env');
     if (!this.parentPageId) throw new Error('Missing lawyer Notion parent_page_id in config');
@@ -166,28 +81,6 @@ export class ScalekitNotionWriter {
     });
     return result.data;
   }
-}
-
-function extractNotionSearchResults(data) {
-  const raw = data?.results || data?.pages || data?.objects || data?.data?.results || data?.result?.results || (Array.isArray(data) ? data : []);
-  return raw.map((page) => ({ id: extractPageId(page), title: notionTitle(page) })).filter((p) => p.id || p.title);
-}
-
-function notionTitle(page) {
-  const propTitle = page?.properties?.title?.title || page?.properties?.Name?.title || page?.properties?.name?.title;
-  if (Array.isArray(propTitle)) return propTitle.map((x) => x.plain_text || x.text?.content || '').join('');
-  return page?.title || page?.name || page?.properties?.title || '';
-}
-
-function notionParentPageId(page, depth = 0) {
-  if (!page || typeof page !== 'object' || depth > 4) return null;
-  const parent = page.parent;
-  if (parent?.page_id || parent?.pageId) return parent.page_id || parent.pageId;
-  for (const key of ['page', 'data', 'result', 'object']) {
-    const found = notionParentPageId(page[key], depth + 1);
-    if (found) return found;
-  }
-  return null;
 }
 
 function normalizeCreatedPage(data) {

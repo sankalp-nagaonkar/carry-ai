@@ -488,7 +488,7 @@ async function startVisit() {
   source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); markInsightUpdated(); });
   source.addEventListener('final_started', () => { setLive('thinking', 'Drafting note'); setProcessState('Drafting final'); addActivity('Final drafting started', 'Carry is preparing the review draft.', 'tag-warn'); });
   source.addEventListener('final', (e) => { onFinal(parse(e).output); markInsightUpdated('Draft ready'); });
-  source.addEventListener('notion_started', () => addAction('Notion sync', 'Creating the patient page and timestamped markdown visit note.', 'tag'));
+  source.addEventListener('notion_started', () => addAction('Notion sync', 'Creating a timestamped Notion visit note.', 'tag'));
   source.addEventListener('notion', (e) => onNotion(parse(e)));
   source.addEventListener('done', (e) => finishVisit(source, parse(e)));
   source.addEventListener('error', (e) => {
@@ -857,8 +857,8 @@ function reviewItem(title, status, body, full) {
 }
 
 function onNotion(data) {
-  if (data.ok && data.page?.url) addAction('Notion synced', `Markdown visit note created under the patient page. ${data.page.url}`, 'tag-good', 'Done');
-  else if (data.ok) addAction('Notion synced', 'Markdown visit note created under the patient page.', 'tag-good', 'Done');
+  if (data.ok && data.page?.url) addAction('Notion synced', `Timestamped visit note created in Notion. ${data.page.url}`, 'tag-good', 'Done');
+  else if (data.ok) addAction('Notion synced', 'Timestamped visit note created in Notion.', 'tag-good', 'Done');
   else addAction('Notion sync', `Needs review: ${data.error || 'unknown error'}`, 'tag-warn');
 }
 

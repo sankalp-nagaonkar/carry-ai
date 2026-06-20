@@ -28,7 +28,7 @@ a customer-facing dashboard.
   catches an allergy conflict before it reaches the patient
 - A multi-meeting lawyer demo: Meeting 1 captures a dismissal date, Meeting 2 reads
   it back and catches a proposed filing plan that would miss the limitation deadline
-- Automatic Notion sync via Scalekit: Carry creates or reuses a patient page, then writes each visit as a timestamped subpage rendered with native Notion headings and bullets
+- Automatic Notion sync via Scalekit: Carry writes each visit as one timestamped page titled with patient name and date, rendered with native Notion headings and bullets
 
 The capture hardware is the device layer that feeds this system. In the demo, a
 transcript simulator stands in for the wearable.
@@ -64,7 +64,7 @@ The app does not let judges switch sources from inside the UI. The command deter
 4. The picker advances to Visit 2 and Today shows the carried-forward facts
 5. Begin next visit again: the unsafe antibiotic is struck out, a safe one drafted,
    and a follow-up is prepared
-6. When the final pass completes, Carry writes the note as a timestamped Notion subpage under the patient page
+6. When the final pass completes, Carry writes the note as a timestamped Notion page titled with patient name and date
 
 Use **Reset record** (top right) to clear the patient and replay from scratch.
 

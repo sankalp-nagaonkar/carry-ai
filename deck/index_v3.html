@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Carry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet" />
+<style>
+:root{
+  color-scheme: light;
+  --bg: oklch(98.4% 0.004 247);
+  --paper: oklch(99.4% 0.002 247);
+  --panel-2: oklch(97.2% 0.005 247);
+  --raised: oklch(96% 0.007 247);
+  --ink: oklch(26% 0.024 257);
+  --ink-2: oklch(44% 0.02 257);
+  --ink-3: oklch(58% 0.016 257);
+  --faint: oklch(70% 0.012 257);
+  --line: oklch(91.5% 0.008 257);
+  --line-2: oklch(88% 0.01 257);
+  --accent: oklch(54% 0.108 244);
+  --accent-ink: oklch(42% 0.11 244);
+  --accent-wash: oklch(96% 0.024 244);
+  --teal: oklch(58% 0.082 196);
+  --teal-wash: oklch(96% 0.03 196);
+  --good: oklch(56% 0.094 158);
+  --good-wash: oklch(96% 0.035 158);
+  --warn: oklch(64% 0.114 76);
+  --warn-wash: oklch(96.5% 0.05 76);
+  --bad: oklch(56% 0.142 27);
+  --bad-wash: oklch(96% 0.04 27);
+  --shadow-md: 0 4px 14px oklch(40% 0.03 257 / 0.06), 0 1px 3px oklch(40% 0.03 257 / 0.05);
+  --shadow-lg: 0 24px 60px oklch(40% 0.04 257 / 0.12);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);}
+body{
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  letter-spacing:-0.006em;
+}
+.serif{font-family:Newsreader,Georgia,serif;font-weight:500;letter-spacing:0;}
+
+/* deck shell */
+.deck{display:flex;flex-direction:column;align-items:center;gap:34px;padding:46px 20px 80px;}
+.slide{
+  position:relative;
+  width:1280px;height:720px;
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:22px;
+  box-shadow:var(--shadow-lg);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.pad{padding:56px 64px;flex:1;display:flex;flex-direction:column;min-height:0;}
+
+/* chrome */
+.kicker{display:inline-flex;align-items:center;gap:9px;font-size:12.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent-ink);}
+.kicker::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);}
+.snum{position:absolute;right:30px;bottom:22px;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums;}
+.wmark{position:absolute;left:30px;bottom:20px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3);font-weight:600;}
+.wmark .dot{width:16px;height:16px;border-radius:6px;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;}
+.wmark .dot::after{content:"";width:7px;height:7px;border-radius:2px;background:var(--paper);}
+
+h1{font-size:62px;line-height:1.02;font-weight:800;letter-spacing:-0.028em;margin:0;}
+h2{font-size:38px;line-height:1.08;font-weight:760;letter-spacing:-0.02em;margin:0;}
+h3{font-size:18px;font-weight:700;margin:0;letter-spacing:-0.01em;}
+.lead{font-size:20px;line-height:1.5;color:var(--ink-2);max-width:62ch;font-weight:450;}
+.muted{color:var(--ink-3);}
+p{margin:0;}
+
+/* title slide */
+.title-slide .pad{justify-content:center;}
+.brandrow{display:flex;align-items:center;gap:14px;margin-bottom:30px;}
+.brandmark{width:46px;height:46px;border-radius:13px;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-md);}
+.brandmark::after{content:"";width:18px;height:18px;border-radius:6px;background:var(--paper);}
+.brandname{font-size:26px;font-weight:800;letter-spacing:-0.02em;}
+.title-slide h1{max-width:20ch;}
+.title-sub{margin-top:26px;font-size:22px;color:var(--ink-2);max-width:54ch;line-height:1.5;}
+.title-meta{margin-top:46px;display:flex;gap:34px;flex-wrap:wrap;}
+.title-meta .ti{display:flex;flex-direction:column;gap:3px;}
+.title-meta .ti b{font-size:14px;font-weight:700;}
+.title-meta .ti span{font-size:13px;color:var(--ink-3);}
+.title-glow{position:absolute;inset:auto -160px -260px auto;width:680px;height:680px;border-radius:50%;
+  background:radial-gradient(circle at center, oklch(54% 0.108 244 / 0.10), transparent 62%);pointer-events:none;}
+
+/* generic layout helpers */
+.head{display:flex;flex-direction:column;gap:14px;margin-bottom:30px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px;flex:1;min-height:0;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;flex:1;min-height:0;}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:24px 26px;display:flex;flex-direction:column;gap:12px;}
+.panel.tint{background:var(--panel-2);}
+.panel h3{display:flex;align-items:center;gap:10px;}
+.panel .pico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--paper);}
+.panel ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:11px;}
+.panel li{font-size:15px;line-height:1.45;color:var(--ink-2);padding-left:20px;position:relative;}
+.panel li::before{content:"";position:absolute;left:0;top:8px;width:7px;height:7px;border-radius:50%;background:var(--line-2);}
+.panel li.bad::before{background:var(--bad);}
+.panel li.good::before{background:var(--good);}
+.panel li.warn::before{background:var(--warn);}
+.panel li.accent::before{background:var(--accent);}
+.panel li b{color:var(--ink);font-weight:650;}
+
+/* tags */
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:650;padding:3px 10px;border-radius:999px;background:var(--raised);color:var(--ink-2);border:1px solid var(--line);}
+.tag.accent{background:var(--accent-wash);color:var(--accent-ink);border-color:transparent;}
+.tag.good{background:var(--good-wash);color:var(--good);border-color:transparent;}
+.tag.warn{background:var(--warn-wash);color:var(--warn);border-color:transparent;}
+.tag.bad{background:var(--bad-wash);color:var(--bad);border-color:transparent;}
+.tag.teal{background:var(--teal-wash);color:var(--teal);border-color:transparent;}
+
+/* persona */
+.persona{display:flex;gap:22px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:18px;padding:26px 28px;margin-bottom:24px;}
+.avatar{width:74px;height:74px;border-radius:20px;background:var(--accent);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;flex:none;box-shadow:var(--shadow-md);}
+.persona .who b{font-size:22px;font-weight:760;}
+.persona .who p{font-size:15px;color:var(--ink-3);margin-top:3px;}
+
+/* journey */
+.journey{display:flex;flex-direction:column;gap:14px;flex:1;}
+.jrow{display:grid;grid-template-columns:130px 1fr;gap:20px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 22px;}
+.jrow .jt{font-size:13px;font-weight:700;color:var(--accent-ink);text-transform:uppercase;letter-spacing:0.05em;}
+.jrow .jb{font-size:15.5px;color:var(--ink-2);line-height:1.45;}
+.jrow .jb b{color:var(--ink);font-weight:650;}
+
+/* pipeline v2: data trace, 2-row card grid */
+.trace{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:18px;flex:1;min-height:0;}
+.tcard{background:var(--panel-2);border:1px solid var(--line);border-radius:15px;padding:18px 20px;display:flex;flex-direction:column;gap:11px;position:relative;overflow:hidden;}
+.tcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent);}
+.tcard.c-bad::before{background:var(--bad);}
+.tcard.c-teal::before{background:var(--teal);}
+.tcard.c-warn::before{background:var(--warn);}
+.tcard.c-good::before{background:var(--good);}
+.tcard .top{display:flex;align-items:center;gap:11px;}
+.tcard .sn{width:28px;height:28px;border-radius:8px;background:var(--paper);border:1px solid var(--line);color:var(--ink-2);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;}
+.tcard h4{margin:0;font-size:15.5px;font-weight:760;letter-spacing:-0.01em;}
+.tcard .dk{font-size:10px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--faint);}
+.tcard .quote{font-size:13px;line-height:1.55;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.tcard .quote.plain{background:transparent;border:none;padding:0;color:var(--ink-2);font-size:12.5px;}
+.tcard .mask{background:var(--bad-wash);color:var(--bad);border-radius:5px;padding:0 5px;font-size:12px;font-weight:700;}
+.tcard .pills{display:flex;flex-wrap:wrap;gap:7px;}
+.tcard .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:650;padding:4px 11px;border-radius:999px;background:var(--paper);color:var(--ink-2);border:1px solid var(--line);}
+.tcard .pill b{font-weight:760;color:var(--ink);}
+.tcard .pill.bad{background:var(--bad-wash);color:var(--bad);border-color:transparent;}
+.tcard .pill.warn{background:var(--warn-wash);color:var(--warn);border-color:transparent;}
+.tcard .pill.good{background:var(--good-wash);color:var(--good);border-color:transparent;}
+.tcard .pill.teal{background:var(--teal-wash);color:var(--teal);border-color:transparent;}
+.tcard .pill.accent{background:var(--accent-wash);color:var(--accent-ink);border-color:transparent;}
+.tcard.result{background:var(--ink);border:none;justify-content:center;gap:7px;}
+.tcard.result::before{display:none;}
+.tcard.result .dk{color:oklch(72% 0.02 257);}
+.tcard.result h4{color:var(--paper);font-size:17px;line-height:1.3;}
+.tcard.result p{color:oklch(80% 0.015 257);font-size:13px;line-height:1.5;margin:0;}
+
+/* screenshot slides */
+.shot-slide .pad{padding:42px 52px 48px;}
+.shot-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;gap:30px;}
+.shot-head .st{display:flex;flex-direction:column;gap:9px;}
+.shot-frame{flex:1;min-height:0;border-radius:16px;border:1px solid var(--line-2);overflow:hidden;box-shadow:var(--shadow-lg);background:var(--paper);position:relative;}
+.shot-frame img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block;}
+.callouts{position:absolute;display:flex;flex-direction:column;gap:8px;}
+.callout{background:oklch(26% 0.024 257 / 0.92);color:var(--paper);font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:9px;box-shadow:var(--shadow-md);max-width:240px;line-height:1.35;}
+.callout.warn{background:oklch(56% 0.142 27 / 0.94);}
+.callout.ok{background:oklch(56% 0.094 158 / 0.94);}
+
+/* split (text + shot) */
+.split{display:grid;grid-template-columns:0.82fr 1.18fr;gap:34px;flex:1;min-height:0;}
+.split .col{display:flex;flex-direction:column;gap:16px;justify-content:center;}
+.split .shot-frame{align-self:stretch;}
+
+/* privacy diagram */
+.flow{display:flex;align-items:center;gap:14px;margin-top:6px;flex-wrap:wrap;}
+.flownode{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:13px 16px;font-size:13.5px;font-weight:600;color:var(--ink);box-shadow:var(--shadow-md);}
+.flownode small{display:block;font-weight:500;color:var(--ink-3);font-size:11.5px;margin-top:2px;}
+.flownode.red{border-color:transparent;background:var(--bad-wash);}
+.flownode.green{border-color:transparent;background:var(--good-wash);}
+.farrow{color:var(--faint);font-size:20px;}
+
+/* code-ish redaction sample */
+.redbox{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:16px 18px;font-size:14px;line-height:1.7;}
+.redbox .lbl{font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.redbox .lbl.raw::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--bad);}
+.redbox .lbl.safe::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--good);}
+.redbox .lbl.raw,.redbox .lbl.safe{display:flex;}
+mark.raw{background:transparent;color:var(--bad);text-decoration:line-through;text-decoration-color:oklch(56% 0.142 27 / 0.6);}
+mark.safe{background:var(--bad-wash);color:var(--bad);border-radius:5px;padding:0 6px;font-size:13px;font-weight:600;}
+.redbox + .redbox{margin-top:12px;}
+
+/* deploy table */
+.dtable{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+.drow{display:grid;grid-template-columns:200px 1fr;gap:0;}
+.drow + .drow{border-top:1px solid var(--line);}
+.drow .dk{background:var(--panel-2);padding:15px 20px;font-size:14px;font-weight:700;color:var(--ink);}
+.drow .dv{padding:15px 20px;font-size:14px;color:var(--ink-2);line-height:1.45;}
+.drow .dv b{color:var(--ink);font-weight:650;}
+
+/* observability engine */
+.obs-wrap{display:grid;grid-template-columns:0.94fr 1.06fr;gap:28px;flex:1;min-height:0;align-items:stretch;}
+.trace-ledger{background:var(--panel-2);border:1px solid var(--line);border-radius:18px;padding:24px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;}
+.trace-ledger::after{content:"";position:absolute;left:42px;top:74px;bottom:72px;width:1px;background:var(--line-2);}
+.ledger-step{display:grid;grid-template-columns:38px 1fr;gap:14px;align-items:start;position:relative;z-index:1;}
+.ledger-step .node{width:38px;height:38px;border-radius:12px;background:var(--paper);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--accent-ink);box-shadow:var(--shadow-md);}
+.ledger-step b{display:block;font-size:15px;margin-bottom:3px;}
+.ledger-step span{display:block;font-size:12.5px;line-height:1.42;color:var(--ink-3);}
+.obs-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;min-height:0;}
+.obs-card{border:1px solid var(--line);border-radius:16px;padding:18px 20px;background:var(--paper);display:flex;flex-direction:column;gap:10px;}
+.obs-card.strong{grid-column:1 / -1;background:var(--ink);border:none;justify-content:center;}
+.obs-card h3{font-size:16px;}
+.obs-card p{font-size:13.5px;line-height:1.48;color:var(--ink-2);}
+.obs-card.strong h3{color:var(--paper);font-size:19px;}
+.obs-card.strong p{color:oklch(80% 0.015 257);max-width:78ch;}
+.obs-proof{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto;}
+.obs-slide .head{margin-bottom:20px;gap:10px;}
+.obs-slide h2{font-size:36px;}
+.obs-slide .lead{font-size:18px;line-height:1.42;max-width:82ch;}
+.obs-slide .obs-wrap{gap:22px;}
+.obs-slide .trace-ledger{padding:20px;}
+.obs-slide .trace-ledger::after{left:38px;top:68px;bottom:64px;}
+.obs-slide .ledger-step{grid-template-columns:34px 1fr;gap:12px;}
+.obs-slide .ledger-step .node{width:34px;height:34px;border-radius:11px;}
+.obs-slide .ledger-step b{font-size:14.5px;margin-bottom:2px;}
+.obs-slide .ledger-step span{font-size:12px;line-height:1.35;}
+.obs-slide .obs-grid{gap:12px;}
+.obs-slide .obs-card{padding:14px 16px;gap:8px;}
+.obs-slide .obs-card h3{font-size:15px;}
+.obs-slide .obs-card p{font-size:12.5px;line-height:1.38;}
+.obs-slide .obs-card.strong h3{font-size:17px;}
+.obs-slide .obs-card.strong p{font-size:12.5px;line-height:1.4;}
+.obs-proof .tag{font-size:11.5px;padding:3px 9px;}
+
+/* closing */
+.close-slide .pad{justify-content:center;}
+.close-slide h2{font-size:46px;max-width:20ch;}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px;}
+.three .c{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:20px;}
+.three .c .n{font-size:13px;font-weight:700;color:var(--accent-ink);text-transform:uppercase;letter-spacing:0.05em;}
+.three .c p{font-size:15px;color:var(--ink-2);margin-top:8px;line-height:1.45;}
+
+@media print{
+  body{background:white;}
+  .deck{gap:0;padding:0;}
+  .slide{border-radius:0;box-shadow:none;border:none;page-break-after:always;margin:0;}
+}
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide title-slide">
+    <div class="title-glow"></div>
+    <div class="pad">
+      <div class="brandrow">
+        <div class="brandmark"></div>
+        <span class="brandname">Carry</span>
+      </div>
+      <h1>A wearable co-pilot for high-stakes professional conversations.</h1>
+      <p class="title-sub">Carry listens through a wearable, privacy-filters every word, drafts the work product, remembers context, and prepares reviewable actions. Doctors are the first deep profession pack, not the limit of the platform.</p>
+      <div class="title-meta">
+        <div class="ti"><b>Profession packs</b><span>Doctors first, lawyers next</span></div>
+        <div class="ti"><b>Wearable-first</b><span>Ambient capture, no keyboard drag</span></div>
+        <div class="ti"><b>Review-first</b><span>Drafts and actions stay accountable</span></div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">01</div>
+  </section>
+
+  <!-- 2. THE USER -->
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">The user</span>
+        <h2>A doctor who spends the evening finishing notes from the morning.</h2>
+      </div>
+      <div class="persona">
+        <div class="avatar">DR</div>
+        <div class="who">
+          <b>Dr. Rao, primary care physician</b>
+          <p>Sees 25 to 35 patients a day. Returning patients, new patients, overlapping histories.</p>
+        </div>
+      </div>
+      <div class="grid3">
+        <div class="panel">
+          <h3><span class="pico" style="background:var(--accent)">1</span>During the visit</h3>
+          <ul>
+            <li>Splits attention between the patient and the keyboard.</li>
+            <li>Tries to recall what changed since the last visit.</li>
+            <li>Holds allergies and medications in memory.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3><span class="pico" style="background:var(--warn)">2</span>After the visit</h3>
+          <ul>
+            <li>Writes the SOAP note from scattered memory.</li>
+            <li>Sets coding, follow-ups, and referrals by hand.</li>
+            <li>Documentation spills into personal time.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3><span class="pico" style="background:var(--bad)">3</span>Across visits</h3>
+          <ul>
+            <li>Prior context lives in long charts no one re-reads.</li>
+            <li>A known allergy can be missed under time pressure.</li>
+            <li>Continuity depends on one person remembering.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">02</div>
+  </section>
+
+  <!-- 3. THE PROBLEM -->
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">The problem</span>
+        <h2>Documentation steals time, and continuity is fragile.</h2>
+        <p class="lead">Two costs sit on every clinician. The administrative load that follows each visit, and the risk that critical context from earlier visits does not surface at the moment it matters.</p>
+      </div>
+      <div class="grid2">
+        <div class="panel tint">
+          <h3>Time lost to administration</h3>
+          <ul>
+            <li class="warn">Clinicians spend close to <b>two hours on paperwork for every hour</b> of patient care.</li>
+            <li class="warn">Notes are reconstructed from memory, hours after the conversation.</li>
+            <li class="warn">Coding, follow-ups, and referrals are manual and easy to defer.</li>
+          </ul>
+        </div>
+        <div class="panel tint">
+          <h3>Context that does not carry</h3>
+          <ul>
+            <li class="bad">A <b>penicillin allergy</b> noted last visit may not surface before the next prescription.</li>
+            <li class="bad">Prior medications and decisions are buried in long charts.</li>
+            <li class="bad">Continuity depends on a human re-reading everything, every time.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">03</div>
+  </section>
+
+  <!-- 4. USER JOURNEY -->
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">The journey</span>
+        <h2>The same visit, with Carry listening.</h2>
+      </div>
+      <div class="journey">
+        <div class="jrow"><span class="jt">Before</span><span class="jb">The clinician opens the room with no briefing. They recall the last visit from memory.</span></div>
+        <div class="jrow"><span class="jt">Pre-read</span><span class="jb"><b>Carry presents a one-screen briefing</b> built from earlier visits: known allergies, active medications, and open questions, carried forward automatically.</span></div>
+        <div class="jrow"><span class="jt">During</span><span class="jb">Carry listens, de-identifies on device, and <b>tracks clinical changes live</b>: symptoms, medication decisions, safety conflicts.</span></div>
+        <div class="jrow"><span class="jt">End</span><span class="jb">A <b>SOAP note, coding suggestions, and a follow-up plan</b> are drafted in seconds, each clearly marked for clinician review.</span></div>
+        <div class="jrow"><span class="jt">After</span><span class="jb">The note syncs to the record, the follow-up is prepared, and <b>what was learned is carried into the next visit</b>.</span></div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">04</div>
+  </section>
+
+  <!-- 5. HOW WE SOLVE IT -->
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">How it works</span>
+        <h2>Follow one sentence through the pipeline.</h2>
+      </div>
+      <div class="trace">
+        <div class="tcard">
+          <div class="top"><span class="sn">1</span><h4>Capture</h4></div>
+          <span class="dk">Heard from patient</span>
+          <div class="quote">“I am Anaya Mehta. Amoxicillin should help the throat.”</div>
+        </div>
+        <div class="tcard c-bad">
+          <div class="top"><span class="sn">2</span><h4>Privacy filter</h4></div>
+          <span class="dk">Sent for processing</span>
+          <div class="quote">“I am <span class="mask">[PERSON_1]</span>. Amoxicillin should help the throat.”</div>
+        </div>
+        <div class="tcard c-teal">
+          <div class="top"><span class="sn">3</span><h4>Understand live</h4></div>
+          <span class="dk">Extracted</span>
+          <div class="pills">
+            <span class="pill teal">Medication <b>amoxicillin</b></span>
+            <span class="pill bad">Penicillin allergy on file</span>
+          </div>
+        </div>
+        <div class="tcard c-warn">
+          <div class="top"><span class="sn">4</span><h4>Draft</h4></div>
+          <span class="dk">Drafted for review</span>
+          <div class="pills">
+            <span class="pill warn">Switch to azithromycin</span>
+            <span class="pill teal">SOAP note</span>
+            <span class="pill">ICD-10 J02.9</span>
+          </div>
+        </div>
+        <div class="tcard c-good">
+          <div class="top"><span class="sn">5</span><h4>Remember and act</h4></div>
+          <span class="dk">After sign-off</span>
+          <div class="pills">
+            <span class="pill good">Synced to Notion</span>
+            <span class="pill good">Follow-up booked</span>
+            <span class="pill accent">Allergy carried forward</span>
+          </div>
+        </div>
+        <div class="tcard result">
+          <span class="dk">Net result</span>
+          <h4>A risky prescription, caught and corrected before sign-off.</h4>
+          <p>The note is drafted, the follow-up is ready, and the allergy is remembered for next time.</p>
+        </div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">05</div>
+  </section>
+
+  <!-- 6. APP: TODAY (empty + pre-read) -->
+  <section class="slide shot-slide">
+    <div class="pad">
+      <div class="shot-head">
+        <div class="st">
+          <span class="kicker">The product</span>
+          <h2>Today: the pre-visit briefing</h2>
+          <p class="muted" style="font-size:15px;max-width:60ch;">A returning patient. The briefing is built only from what Carry captured in earlier visits, with known allergies and medications carried forward.</p>
+        </div>
+        <span class="tag accent">Live dashboard</span>
+      </div>
+      <div class="shot-frame">
+        <img src="shots-v2/today-after-v1.png" alt="Today pre-read" />
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">06</div>
+  </section>
+
+  <!-- 7. APP: LIVE VISIT (hero, allergy catch) -->
+  <section class="slide shot-slide">
+    <div class="pad">
+      <div class="shot-head">
+        <div class="st">
+          <span class="kicker">The product</span>
+          <h2>Live Visit: the safety catch</h2>
+          <p class="muted" style="font-size:15px;max-width:62ch;">An antibiotic is proposed, the patient states a penicillin allergy, and Carry strikes the unsafe drug, flags the conflict, and tracks the safe alternative, as it happens.</p>
+        </div>
+        <span class="tag bad">Allergy conflict detected</span>
+      </div>
+      <div class="shot-frame">
+        <img src="shots-v2/live-visit2-allergy.png" alt="Live visit allergy catch" />
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">07</div>
+  </section>
+
+  <!-- 8. APP: REVIEW (final draft) -->
+  <section class="slide shot-slide">
+    <div class="pad">
+      <div class="shot-head">
+        <div class="st">
+          <span class="kicker">The product</span>
+          <h2>Final draft, ready for review</h2>
+          <p class="muted" style="font-size:15px;max-width:62ch;">SOAP note, medication decision trail, coding suggestions, and a follow-up plan. Every item is a draft that requires clinician sign-off before anything is final.</p>
+        </div>
+        <span class="tag warn">Clinician review required</span>
+      </div>
+      <div class="shot-frame">
+        <img src="shots-v2/live-visit2-review.png" alt="Final review" />
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">08</div>
+  </section>
+
+  <!-- 9. APP: CONTINUITY (graph) -->
+  <section class="slide shot-slide">
+    <div class="pad">
+      <div class="shot-head">
+        <div class="st">
+          <span class="kicker">The product</span>
+          <h2>Continuity: the patient knowledge graph</h2>
+          <p class="muted" style="font-size:15px;max-width:62ch;">Every captured fact is wired to the visit where Carry learned it. The graph and timeline are built from real stored memory, not a fixed layout, and grow with each visit.</p>
+        </div>
+        <span class="tag teal">Built from live memory</span>
+      </div>
+      <div class="shot-frame">
+        <img src="shots-v2/graph.png" alt="Knowledge graph" />
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">09</div>
+  </section>
+
+  <!-- 10. PRIVACY -->
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">Privacy</span>
+        <h2>De-identified before anything leaves the device.</h2>
+      </div>
+      <div class="split">
+        <div class="col">
+          <div class="flow" style="margin-bottom:6px;">
+            <span class="flownode red">Captured audio<small>raw transcript</small></span>
+            <span class="farrow">&rsaquo;</span>
+            <span class="flownode green">Privacy filter<small>on device</small></span>
+            <span class="farrow">&rsaquo;</span>
+            <span class="flownode">Processing<small>de-identified text</small></span>
+          </div>
+          <ul style="display:flex;flex-direction:column;gap:12px;margin:8px 0 0;padding:0;list-style:none;">
+            <li style="font-size:15px;color:var(--ink-2);line-height:1.45;padding-left:18px;position:relative;"><span style="position:absolute;left:0;top:7px;width:7px;height:7px;border-radius:50%;background:var(--good)"></span>Privacy filtering is the <b style="color:var(--ink)">first step</b> after capture, before any model sees the text.</li>
+            <li style="font-size:15px;color:var(--ink-2);line-height:1.45;padding-left:18px;position:relative;"><span style="position:absolute;left:0;top:7px;width:7px;height:7px;border-radius:50%;background:var(--good)"></span>Direct identifiers are masked. <b style="color:var(--ink)">Clinical durations and relative dates are preserved</b> so the note stays accurate.</li>
+            <li style="font-size:15px;color:var(--ink-2);line-height:1.45;padding-left:18px;position:relative;"><span style="position:absolute;left:0;top:7px;width:7px;height:7px;border-radius:50%;background:var(--good)"></span>Stored memory is filtered too: a blocklist keeps sensitive fields out of long-term context.</li>
+            <li style="font-size:15px;color:var(--ink-2);line-height:1.45;padding-left:18px;position:relative;"><span style="position:absolute;left:0;top:7px;width:7px;height:7px;border-radius:50%;background:var(--good)"></span>Privacy-first, compliance-oriented architecture. The proof is visible in the transcript.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <div class="redbox">
+            <div class="lbl raw">Captured</div>
+            <div>My name is <mark class="raw">Anaya Mehta</mark>. I have had a sore throat and fever for four days.</div>
+          </div>
+          <div class="redbox">
+            <div class="lbl safe">Sent for processing</div>
+            <div>My name is <mark class="safe">[PRIVATE_PERSON_1]</mark>. I have had a sore throat and fever for four days.</div>
+          </div>
+          <p style="font-size:13px;color:var(--ink-3);margin-top:14px;">The dashboard shows both blocks side by side during the live visit, so the de-identification is auditable, not assumed.</p>
+        </div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">10</div>
+  </section>
+
+  <!-- 11. ENGINE OBSERVABILITY -->
+  <section class="slide obs-slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">Trust engine</span>
+        <h2>Every AI action leaves a trace.</h2>
+        <p class="lead">The risk with professional agents is not one bad answer. It is silent authority. Carry records what happened, what was allowed, what was drafted, and what still needs human review.</p>
+      </div>
+      <div class="obs-wrap">
+        <div class="trace-ledger">
+          <div class="ledger-step"><div class="node">01</div><div><b>Transcript event</b><span>UTC timestamp, speaker, raw text, and source session.</span></div></div>
+          <div class="ledger-step"><div class="node">02</div><div><b>Privacy decision</b><span>Captured text and sent-for-processing text, with redactions.</span></div></div>
+          <div class="ledger-step"><div class="node">03</div><div><b>Reasoning pass</b><span>Incremental draft, final draft, model, prompt pack, and status.</span></div></div>
+          <div class="ledger-step"><div class="node">04</div><div><b>Memory write</b><span>Only safe fields are carried forward, linked to the visit that taught them.</span></div></div>
+          <div class="ledger-step"><div class="node">05</div><div><b>Tool action</b><span>Scoped integration call, result, and review state before it becomes work.</span></div></div>
+        </div>
+        <div class="obs-grid">
+          <div class="obs-card">
+            <h3>Scoped authority</h3>
+            <p>Tools are enabled by named connections and config. No profession pack gets blanket access to external systems.</p>
+            <div class="obs-proof"><span class="tag accent">Scalekit</span><span class="tag">YAML policy</span></div>
+          </div>
+          <div class="obs-card">
+            <h3>Human review gates</h3>
+            <p>Doctor outputs are drafts. Carry can prepare the note and action trail, but sign-off stays with the professional.</p>
+            <div class="obs-proof"><span class="tag warn">Review required</span><span class="tag">No auto diagnosis</span></div>
+          </div>
+          <div class="obs-card">
+            <h3>Replayable context</h3>
+            <p>Chunks, redactions, outputs, memory updates, and sync results are stored so a bad run is investigable.</p>
+            <div class="obs-proof"><span class="tag teal">Session trace</span><span class="tag">SQLite memory</span></div>
+          </div>
+          <div class="obs-card">
+            <h3>Containment</h3>
+            <p>Live runs are session-bounded. Real transcript history is ignored before the UTC start cutoff.</p>
+            <div class="obs-proof"><span class="tag good">Start cutoff</span><span class="tag">Explicit end</span></div>
+          </div>
+          <div class="obs-card strong">
+            <h3>The engine is not a black box.</h3>
+            <p>Every sentence, mask, reasoning pass, memory update, and tool action is tied back to the conversation that caused it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">11</div>
+  </section>
+
+  <!-- 12. ARCHITECTURE -->
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <span class="kicker">Architecture</span>
+        <h2>Generic core, profession packs on top.</h2>
+      </div>
+      <div class="grid3">
+        <div class="panel">
+          <h3><span class="pico" style="background:var(--accent)">C</span>Core platform</h3>
+          <ul>
+            <li>Streaming transcript ingestion</li>
+            <li>Privacy filter service</li>
+            <li>Incremental and final passes</li>
+            <li>Memory store and audit log</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3><span class="pico" style="background:var(--teal)">D</span>Doctor pack</h3>
+          <ul>
+            <li>SOAP note drafting</li>
+            <li>Medication decision tracking</li>
+            <li>Safety and allergy checks</li>
+            <li>ICD-10 and follow-up plans</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3><span class="pico" style="background:var(--good)">A</span>Actions</h3>
+          <ul>
+            <li>Record sync to Notion</li>
+            <li>Calendar follow-ups</li>
+            <li>Scoped, opt-in connections</li>
+            <li>Every action is accountable</li>
+          </ul>
+        </div>
+      </div>
+      <p style="margin-top:20px;font-size:14px;color:var(--ink-3);">The next profession pack reuses the entire core. Only the outputs, prompts, and memory schema change.</p>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">12</div>
+  </section>
+
+  <!-- 13. CLOSING -->
+  <section class="slide close-slide">
+    <div class="title-glow"></div>
+    <div class="pad">
+      <span class="kicker">Carry</span>
+      <h2 style="margin-top:14px;">Carry the conversation into the work, and into the next visit.</h2>
+      <div class="three">
+        <div class="c"><div class="n">Saves time</div><p>The note, the coding, and the follow-up are drafted before the clinician leaves the room.</p></div>
+        <div class="c"><div class="n">Safer continuity</div><p>What was learned is carried forward, so a known allergy surfaces at the right moment.</p></div>
+        <div class="c"><div class="n">Deploys privately</div><p>Privacy-first by construction, and able to run entirely inside the clinic.</p></div>
+      </div>
+    </div>
+    <div class="wmark"><span class="dot"></span>Carry</div>
+    <div class="snum">13</div>
+  </section>
+
+</div>
+</body>
+</html>

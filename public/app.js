@@ -8,6 +8,7 @@ const NODE_W = 132, NODE_H = 48;
 
 const state = {
   source: null,
+  currentSessionId: null,
   running: false,
   scenario: 'visit1',
   transcriptSource: 'simulator',
@@ -46,6 +47,7 @@ function bindNav() {
   $$('.launch-visit').forEach((b) => b.addEventListener('click', startVisit));
   $$('.scenario-opt').forEach((b) => b.addEventListener('click', () => setScenario(b.dataset.scenario)));
   $$('.source-opt').forEach((b) => b.addEventListener('click', () => setTranscriptSource(b.dataset.source)));
+  $('#end-visit')?.addEventListener('click', endVisit);
   $('#approve-all')?.addEventListener('click', () => go('today'));
   $('#reset-demo')?.addEventListener('click', resetDemo);
 }
@@ -458,11 +460,14 @@ function startVisit() {
   $$('.scenario-opt').forEach((b) => { b.disabled = true; });
   $$('.source-opt').forEach((b) => { b.disabled = true; });
   $('#reset-demo') && ($('#reset-demo').disabled = true);
+  $('#end-visit').hidden = state.transcriptSource !== 'websocket';
+  $('#end-visit').disabled = true;
   setLive('live', state.transcriptSource === 'websocket' ? 'Connecting' : 'Listening');
 
   const source = new EventSource(`/api/live?scenario=${state.scenario}&source=${state.transcriptSource}`);
   state.source = source;
 
+  source.addEventListener('session', (e) => onSession(parse(e)));
   source.addEventListener('chunk', (e) => onChunk(parse(e)));
   source.addEventListener('websocket_status', (e) => onWebsocketStatus(parse(e)));
   source.addEventListener('websocket_complete', (e) => addAction('Live transcript complete', `Capture ended: ${parse(e).reason || 'completed'}.`, 'tag-teal'));
@@ -490,8 +495,27 @@ function resetVisit() {
   $('#live-safety').innerHTML = '<li class="live-empty">No conflicts detected</li>';
   $('#live-missing').innerHTML = '<li class="live-empty">Note looks complete so far</li>';
   $('#action-stack').innerHTML = '<p class="live-empty">Calendar, lab, and sync drafts appear here as the visit progresses.</p>';
+  $('#end-visit').hidden = true;
+  $('#end-visit').disabled = false;
   $('#review').hidden = true;
   $('#card-safety').classList.remove('flag');
+}
+
+function onSession(data) {
+  state.currentSessionId = data?.sessionId || null;
+  if (data?.sourceMode === 'websocket') {
+    $('#end-visit').hidden = false;
+    $('#end-visit').disabled = false;
+    addAction('Real transcript source', 'End the visit manually when the conversation is over.', 'tag-teal');
+  }
+}
+
+async function endVisit() {
+  if (!state.running || !state.currentSessionId) return;
+  $('#end-visit').disabled = true;
+  setLive('thinking', 'Ending visit');
+  addAction('End requested', 'Final draft will run after the live transcript stream closes.', 'tag-warn');
+  await fetch(`/api/end-live?sessionId=${encodeURIComponent(state.currentSessionId)}`).catch(() => {});
 }
 
 function onWebsocketStatus(data) {
@@ -504,6 +528,8 @@ function onWebsocketStatus(data) {
     addAction('Real transcript connected', `Listening to ${data.scope || 'global'} stream.`, 'tag-good');
   } else if (status === 'conversation_started') {
     setLive('live', 'Conversation started');
+  } else if (status === 'transcript_updated' && data.speakers?.length) {
+    setLive('live', `Listening: ${data.speakers.join(', ')}`);
   } else if (status === 'error') {
     addAction('WebSocket issue', data.error || 'Connection issue', 'tag-warn');
   }
@@ -514,9 +540,9 @@ function onChunk(c) {
   $('#convo-count').textContent = String(state.turns);
   const stream = $('#convo-stream');
   stream.querySelector('.convo-empty')?.remove();
-  const who = speakerRole(c.speaker);
+  const who = speakerRole(c);
   const turn = document.createElement('div');
-  turn.className = `turn ${who}`;
+  turn.className = `turn ${who.className}`;
 
   const redactions = c.redactions || [];
   const original = c.incomingText || c.sanitizedText || '';
@@ -538,18 +564,33 @@ function onChunk(c) {
        <div class="turn-redact">${redactions.length} item${redactions.length > 1 ? 's' : ''} redacted before anything leaves the device</div>`
     : `<div class="turn-text">${esc(sanitized)}</div>`;
 
-  turn.innerHTML = `<span class="turn-who">${who === 'patient' ? 'Patient' : 'Clinician'}</span>${body}`;
+  turn.innerHTML = `<span class="turn-who">${esc(who.label)}</span>${body}`;
   stream.appendChild(turn);
   stream.scrollTop = stream.scrollHeight;
 }
 
 // Person 1 leads the consult (clinician), Person 2 is the patient. Fall back to a
 // keyword check for any other labeling scheme.
-function speakerRole(speaker) {
-  const s = String(speaker || '').toLowerCase();
-  if (s.includes('patient') || /\b(person\s*2|speaker\s*2|p2|s2)\b/.test(s)) return 'patient';
-  if (s.includes('doctor') || s.includes('clinician') || /\b(person\s*1|speaker\s*1|p1|s1)\b/.test(s)) return 'doctor';
-  return 'doctor';
+function speakerRole(chunk) {
+  const speaker = typeof chunk === 'string' ? chunk : chunk?.speaker;
+  const sourceMode = typeof chunk === 'object' ? chunk?.sourceMode : null;
+  const s = String(speaker || '').trim();
+  const lower = s.toLowerCase();
+
+  // Real WebSocket transcripts are diarized but not role-labeled. Preserve the
+  // diarized speaker labels instead of pretending every speaker is the clinician.
+  if (sourceMode === 'websocket') {
+    const m = lower.match(/(?:speaker|spk|person)[_\s-]*(\d+)/);
+    const n = m ? Number(m[1]) : null;
+    const label = m ? `Speaker ${n}` : (s || 'Speaker');
+    const className = n != null && n % 2 === 0 ? 'doctor' : 'patient';
+    return { label, className };
+  }
+
+  // Simulator convention: Person 1 leads the consult, Person 2 is the patient.
+  if (lower.includes('patient') || /\b(person\s*2|speaker\s*2|p2|s2)\b/.test(lower)) return { label: 'Patient', className: 'patient' };
+  if (lower.includes('doctor') || lower.includes('clinician') || /\b(person\s*1|speaker\s*1|p1|s1)\b/.test(lower)) return { label: 'Clinician', className: 'doctor' };
+  return { label: s || 'Clinician', className: 'doctor' };
 }
 
 // In the captured block, highlight the original private values that will be masked.
@@ -724,10 +765,13 @@ function onNotion(data) {
 async function finishVisit(source, payload) {
   source?.close();
   state.source = null;
+  state.currentSessionId = null;
   state.running = false;
   state.newestSession = payload?.sessionId || null;
   setLive('done', 'Visit complete');
   $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = 'Begin next visit'; });
+  $('#end-visit').hidden = true;
+  $('#end-visit').disabled = false;
   $$('.source-opt').forEach((b) => { b.disabled = false; });
   syncSourceButtons();
   $('#reset-demo') && ($('#reset-demo').disabled = false);

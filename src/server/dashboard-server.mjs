@@ -11,12 +11,14 @@ import { LiveTranscriptWsConsumer } from '../transcripts/live-transcript-ws-cons
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../../public');
 const port = Number(process.env.PORT || 5173);
+const activeLiveSessions = new Map();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   try {
     if (url.pathname === '/api/live') return handleLive(req, res, url);
+    if (url.pathname === '/api/end-live') return sendJson(res, endLiveSession(url.searchParams.get('sessionId')));
     if (url.pathname === '/api/reset') return sendJson(res, resetRecord(url.searchParams.get('entityId') || 'patient_demo_001'));
     if (url.pathname === '/api/sessions') return sendJson(res, listSessions());
     if (url.pathname === '/api/context') return sendJson(res, listContext(url.searchParams.get('entityId') || 'patient_demo_001'));
@@ -84,8 +86,7 @@ async function handleLive(req, res, url) {
     notionEnabled: Boolean(process.env.NOTION_CONNECTION_NAME),
     websocket: sourceMode === 'websocket' ? {
       backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
-      idleMs: Number(url.searchParams.get('idleMs') || process.env.CARRY_WS_IDLE_MS || 12000),
-      maxMs: Number(url.searchParams.get('maxMs') || process.env.CARRY_WS_MAX_MS || 300000),
+      endPolicy: 'explicit_button_only',
     } : null,
   });
 
@@ -121,7 +122,7 @@ async function handleLive(req, res, url) {
 
   try {
     if (sourceMode === 'websocket') {
-      const transcriptResult = await consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, isClosed: () => closed });
+      const transcriptResult = await consumeRealTranscript({ sessionId: session.session_id, req, emit, ingestAndMaybeProcess, url, isClosed: () => closed });
       if (closed) return;
       emit('websocket_complete', transcriptResult);
       if (!transcriptResult.chunks) {
@@ -153,36 +154,27 @@ async function handleLive(req, res, url) {
   }
 }
 
-async function consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, isClosed }) {
+async function consumeRealTranscript({ sessionId, req, emit, ingestAndMaybeProcess, url, isClosed }) {
   const backendUrl = url.searchParams.get('backendUrl') || process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app';
-  const idleMs = Number(url.searchParams.get('idleMs') || process.env.CARRY_WS_IDLE_MS || 12000);
-  const maxMs = Number(url.searchParams.get('maxMs') || process.env.CARRY_WS_MAX_MS || 300000);
   const consumer = new LiveTranscriptWsConsumer({ backendUrl });
   const controller = new AbortController();
   const seen = new Map();
+  const speakerAliases = new Map();
   let chunks = 0;
   let done = false;
-  let idleTimer = null;
-  let maxTimer = null;
   let resolveDone;
   const donePromise = new Promise((resolve) => { resolveDone = resolve; });
 
   const finish = (reason) => {
     if (done) return;
     done = true;
-    clearTimeout(idleTimer);
-    clearTimeout(maxTimer);
+    activeLiveSessions.delete(sessionId);
     controller.abort();
     resolveDone(reason);
   };
 
+  activeLiveSessions.set(sessionId, { finish, startedAt: new Date().toISOString(), source: 'websocket' });
   req.on('close', () => finish('client_disconnected'));
-  maxTimer = setTimeout(() => finish(chunks ? 'max_duration_reached' : 'no_transcript_before_max_duration'), maxMs);
-
-  const resetIdle = () => {
-    clearTimeout(idleTimer);
-    if (chunks > 0) idleTimer = setTimeout(() => finish('idle_timeout'), idleMs);
-  };
 
   const run = consumer.consume({
     signal: controller.signal,
@@ -214,7 +206,14 @@ async function consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, is
         return;
       }
 
-      for (const [index, segment] of (event.segments || []).entries()) {
+      const segments = event.segments || [];
+      emit('websocket_status', {
+        status: 'transcript_updated',
+        segmentCount: segments.length,
+        speakers: [...new Set(segments.map(rawSpeakerLabel).filter(Boolean))],
+      });
+
+      for (const [index, segment] of segments.entries()) {
         const text = String(segment?.text || '').trim();
         if (!text) continue;
         const segmentId = segment.id || segment.segment_id || segment.transcript_segment_id || `${event.id || 'event'}_${index}`;
@@ -222,10 +221,10 @@ async function consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, is
         if (seen.get(key) === text) continue;
         seen.set(key, text);
         chunks++;
-        resetIdle();
+        const rawSpeaker = rawSpeakerLabel(segment);
         await ingestAndMaybeProcess({
           chunkId: `ws_${safeChunkId(key)}`,
-          speaker: segment.speaker || `SPEAKER_${segment.speaker_id ?? 0}`,
+          speaker: stableSpeakerLabel(rawSpeaker, speakerAliases),
           text,
           startMs: segment.start_ms ?? segment.startMs ?? segment.start_time_ms ?? null,
           endMs: segment.end_ms ?? segment.endMs ?? segment.end_time_ms ?? null,
@@ -236,16 +235,33 @@ async function consumeRealTranscript({ req, emit, ingestAndMaybeProcess, url, is
       }
     },
   }).catch((error) => {
-    if (!done) {
-      emit('websocket_status', { status: 'error', error: error.message || String(error) });
-      finish(chunks ? 'websocket_error_after_chunks' : 'websocket_error_no_chunks');
-    }
+    if (!done) emit('websocket_status', { status: 'error', error: error.message || String(error) });
   });
 
-  emit('websocket_status', { status: 'connecting', backendUrl, idleMs, maxMs });
+  emit('websocket_status', { status: 'connecting', backendUrl, endPolicy: 'explicit_button_only' });
   const reason = await donePromise;
   await run.catch(() => {});
   return { reason, chunks };
+}
+
+function rawSpeakerLabel(segment = {}) {
+  if (segment.speaker) return String(segment.speaker);
+  if (segment.speaker_id !== undefined && segment.speaker_id !== null) return `speaker_${segment.speaker_id}`;
+  return 'speaker_unknown';
+}
+
+function stableSpeakerLabel(raw, aliases) {
+  const key = String(raw || 'speaker_unknown');
+  if (!aliases.has(key)) aliases.set(key, `Speaker ${aliases.size + 1}`);
+  return aliases.get(key);
+}
+
+function endLiveSession(sessionId) {
+  if (!sessionId) return { ok: false, error: 'Missing sessionId' };
+  const active = activeLiveSessions.get(sessionId);
+  if (!active) return { ok: false, error: 'No active live session for sessionId' };
+  active.finish('ended_by_user');
+  return { ok: true, sessionId, reason: 'ended_by_user' };
 }
 
 function safeChunkId(value) {
@@ -258,8 +274,7 @@ function runtimeMode() {
   return {
     transcriptSource,
     backendUrl: process.env.CARRY_BACKEND_WS_URL || 'https://aa22-42-104-224-81.ngrok-free.app',
-    idleMs: Number(process.env.CARRY_WS_IDLE_MS || 12000),
-    maxMs: Number(process.env.CARRY_WS_MAX_MS || 300000),
+    endPolicy: transcriptSource === 'websocket' ? 'explicit_button_only' : 'simulator_auto_end',
   };
 }
 

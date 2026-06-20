@@ -55,7 +55,7 @@ Doctor Mode can run from either source:
 CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run doctor:live:real
 ```
 
-The dashboard also has a **Source** picker, so you can switch between Simulator and Real WebSocket from the UI. Real WebSocket mode finalizes the visit after a short idle window so the final clinical draft can run.
+The dashboard also has a **Source** picker, so you can switch between Simulator and Real WebSocket from the UI. Real WebSocket mode does not auto-finalize. Press **End visit** when the conversation is over, then the final clinical draft runs.
 
 ### Doctor simulator demo flow
 
@@ -82,11 +82,9 @@ Use **Reset matter** (top right) to clear the matter and replay from scratch.
 ### Options
 
 ```bash
-PORT=8080 npm run live                       # different doctor port
-CARRY_WS_IDLE_MS=20000 npm run doctor:live:real  # longer idle window before final pass
-CARRY_WS_MAX_MS=300000 npm run doctor:live:real  # hard stop for real transcript capture
-LAWYER_PORT=8081 npm run lawyer:live         # different lawyer port
-SIM_DELAY_MS=2500 npm run lawyer:live        # slow simulator conversation pacing
+PORT=8080 npm run live                 # different doctor port
+LAWYER_PORT=8081 npm run lawyer:live   # different lawyer port
+SIM_DELAY_MS=2500 npm run lawyer:live  # slow simulator conversation pacing
 ```
 
 ## Architecture

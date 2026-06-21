@@ -38,23 +38,32 @@ transcript simulator stands in for the wearable.
 ```bash
 npm install
 cp .env.example .env   # fill in your keys
-npm run live          # Doctor Mode with real POC WebSocket transcript input
+npm run live          # Doctor Mode with POC WebSocket transcript input
 npm run sim           # Doctor Mode simulator at http://localhost:5173
-npm run lawyer:live   # Lawyer Mode simulator at http://localhost:5174
+npm run lawyer:sim    # Lawyer Mode simulator at http://localhost:5174
+npm run lawyer:live   # Lawyer Mode with POC WebSocket transcript input
+```
+
+On Windows ARM, use the repo-local Node 22 x64 wrapper so native SQLite installs
+and runs under x64:
+
+```powershell
+.\npm22.cmd install
+.\npm22.cmd run sim
 ```
 
 ### Doctor transcript sources
 
 Doctor Mode can run from either source:
 
-- **Real WebSocket**: the POC global transcript API at `/v4/live/transcripts`. Set `CARRY_BACKEND_WS_URL` if you want a different ngrok URL, then run `npm run live`.
+- **Live WebSocket**: the POC global transcript API at `/v4/live/transcripts`. Set `CARRY_BACKEND_WS_URL` if you want a different ngrok URL, then run `npm run live`.
 - **Simulator**: the built-in two-visit medical scenario. Use `npm run sim`.
 
 ```bash
 CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run live
 ```
 
-The app does not let judges switch sources from inside the UI. The command determines the experience. Simulator mode shows the Visit 1 / Visit 2 scenario controls. Real WebSocket mode shows Sam Altman as the live patient, hides simulator controls, and waits for **End visit** before running the final clinical draft.
+The app does not let judges switch sources from inside the UI. The command determines the experience. Simulator mode shows the Visit 1 / Visit 2 scenario controls. WebSocket mode shows Sam Altman as the live patient, hides simulator controls, and waits for **End visit** before running the final clinical draft.
 
 ### Doctor simulator demo flow
 
@@ -79,12 +88,24 @@ Use **Reset record** (top right) to clear the patient and replay from scratch.
 
 Use **Reset matter** (top right) to clear the matter and replay from scratch.
 
+### Lawyer transcript sources
+
+Lawyer Mode can run from either source:
+
+- **Simulator**: the built-in two-meeting legal scenario. Use `npm run lawyer:sim`.
+- **Live WebSocket**: the POC global transcript API at `/v4/live/transcripts`. Set `CARRY_BACKEND_WS_URL` if you want a different ngrok URL, then run `npm run lawyer:live`.
+
+```bash
+CARRY_BACKEND_WS_URL=https://your-ngrok-url.ngrok-free.app npm run lawyer:live
+```
+
 ### Options
 
 ```bash
-PORT=8080 npm run live                 # different real doctor port
+PORT=8080 npm run live                 # different live doctor port
 PORT=8080 npm run sim                  # different simulated doctor port
-LAWYER_PORT=8081 npm run lawyer:live   # different lawyer port
+LAWYER_PORT=8081 npm run lawyer:sim    # different simulated lawyer port
+LAWYER_PORT=8081 npm run lawyer:live   # different live lawyer port
 SIM_DELAY_MS=1800 npm run sim          # override simulated doctor pacing, default is 2300ms
 ```
 

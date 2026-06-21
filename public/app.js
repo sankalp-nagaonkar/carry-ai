@@ -47,14 +47,14 @@ function applyRuntimeMode(source, mode = {}) {
   state.patient = isReal ? { ...REAL_PATIENT, id: mode?.realEntityId || REAL_PATIENT.id } : PATIENT;
   state.appointments = isReal ? REAL_APPOINTMENTS : OTHER_APPOINTMENTS;
   document.body.dataset.transcriptSource = state.transcriptSource;
-  document.title = isReal ? 'Carry Real Clinical Transcript' : 'Carry Clinical Co-Pilot';
-  $('.rail-foot-title').textContent = isReal ? 'Doctor Mode · Real' : 'Doctor Mode · Simulator';
+  document.title = isReal ? 'Carry Clinical Transcript' : 'Carry Clinical Co-Pilot';
+  $('.rail-foot-title').textContent = isReal ? 'Doctor Mode · Live' : 'Doctor Mode · Simulator';
   $('.rail-foot-copy').textContent = isReal
-    ? 'Real transcript input. Clinician approves. End visit manually.'
+    ? 'Transcript input. Clinician approves. End visit manually.'
     : 'AI prepares. Clinician approves. No automatic actions.';
   $('#scenario-picker')?.toggleAttribute('hidden', isReal);
   $('#reset-demo').textContent = isReal ? 'Start new live record' : 'Reset record';
-  $$('.launch-visit').forEach((b) => { b.textContent = isReal ? 'Begin new real visit' : 'Begin next visit'; });
+  $$('.launch-visit').forEach((b) => { b.textContent = isReal ? 'Begin new visit' : 'Begin next visit'; });
 }
 
 function bindNav() {
@@ -189,7 +189,7 @@ function renderToday() {
   $('#brief-meta').textContent = `${patient.age}, ${patient.pronouns} \u00b7 ${patient.mrn} \u00b7 09:30`;
   $('#brief-badge').textContent = scn.badge;
   $('#brief-lead').textContent = isReal
-    ? 'Real transcript mode. Carry listens to the POC WebSocket stream. Press End visit when the conversation is complete.'
+    ? 'Carry listens to the POC WebSocket stream. Press End visit when the conversation is complete.'
     : hasHistory
       ? 'Pre-visit briefing, built from what Carry captured in earlier visits.'
       : 'First consult. No prior visits on file yet.';
@@ -459,7 +459,7 @@ function showNode(id) {
       : '<p class="gd-row">Patient record root.</p>'}`;
 }
 
-/* ---------------- LIVE VISIT (real backend SSE) ---------------- */
+/* ---------------- LIVE VISIT ---------------- */
 async function startVisit() {
   if (state.running) return;
   if (state.transcriptSource === 'websocket') await clearCurrentRecord({ stayOnToday: true });
@@ -467,7 +467,7 @@ async function startVisit() {
   go('visit');
   state.running = true;
   $('#visit-scenario').textContent = state.transcriptSource === 'websocket'
-    ? 'Real WebSocket'
+    ? 'Live WebSocket'
     : (state.scenario === 'visit1' ? 'Visit 1' : 'Visit 2');
   $$('.launch-visit').forEach((b) => { b.disabled = true; b.textContent = 'Visit in progress'; });
   $$('.scenario-opt').forEach((b) => { b.disabled = true; });
@@ -586,7 +586,7 @@ function onSession(data) {
   if (data?.sourceMode === 'websocket') {
     $('#end-visit').hidden = false;
     $('#end-visit').disabled = false;
-    addActivity('Real transcript source', 'End the visit manually when the conversation is over.', 'tag-teal');
+    addActivity('Transcript source', 'End the visit manually when the conversation is over.', 'tag-teal');
   }
 }
 
@@ -608,10 +608,10 @@ function onWebsocketStatus(data) {
   const status = data?.status || 'event';
   if (status === 'connecting') {
     setLive('thinking', 'Connecting');
-    addActivityOnce('Real transcript source', `Connecting to ${data.backendUrl || 'the live WebSocket'}.`, 'tag-teal', 'ws_connecting');
+    addActivityOnce('Transcript source', `Connecting to ${data.backendUrl || 'the live WebSocket'}.`, 'tag-teal', 'ws_connecting');
   } else if (status === 'connected') {
     setLive('live', 'Listening');
-    addActivityOnce('Real transcript connected', `Listening to ${data.scope || 'global'} stream.`, 'tag-good', 'ws_connected');
+    addActivityOnce('Transcript connected', `Listening to ${data.scope || 'global'} stream.`, 'tag-good', 'ws_connected');
   } else if (status === 'conversation_started') {
     setLive('live', 'Conversation started');
   } else if (status === 'transcript_updated' && data.speakers?.length) {
@@ -665,7 +665,7 @@ function speakerRole(chunk) {
   const s = String(speaker || '').trim();
   const lower = s.toLowerCase();
 
-  // Real WebSocket transcripts are diarized but not role-labeled. Preserve the
+  // WebSocket transcripts are diarized but not role-labeled. Preserve the
   // diarized speaker labels instead of pretending every speaker is the clinician.
   if (sourceMode === 'websocket') {
     const m = lower.match(/(?:speaker|spk|person)[_\s-]*(\d+)/);
@@ -871,7 +871,7 @@ async function finishVisit(source, payload) {
   setLive('done', 'Visit complete');
   setProcessState('Visit complete');
   stopProcessTimer();
-  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin new real visit' : 'Begin next visit'; });
+  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin new visit' : 'Begin next visit'; });
   $('#end-visit').hidden = true;
   $('#end-visit').disabled = false;
   syncScenarioButtons();

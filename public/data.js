@@ -63,8 +63,8 @@ export const SCENARIOS = {
 };
 
 export const REAL_SCENARIO = {
-  label: 'Real transcript',
-  badge: 'Real transcript',
+  label: 'Live transcript',
+  badge: 'Live transcript',
   reason: 'Live clinical conversation',
   agenda: [
     'Confirm identity and reason for visit verbally',

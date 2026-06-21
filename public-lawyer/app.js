@@ -1,4 +1,4 @@
-import { MATTER, OTHER_MEETINGS, SCENARIOS } from '/data.js';
+import { MATTER, OTHER_MEETINGS, SCENARIOS, EXAMPLE_MATTERS } from '/data.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -8,8 +8,12 @@ const NODE_W = 132, NODE_H = 48;
 
 const state = {
   source: null,
+  currentSessionId: null,
+  entityId: ENTITY,
   running: false,
   scenario: 'meeting1',
+  transcriptSource: 'simulator',
+  selectedMatterId: EXAMPLE_MATTERS[0]?.id || null,
   turns: 0,
   facts: new Set(),
   issues: new Set(),
@@ -23,13 +27,35 @@ init();
 
 async function init() {
   bindNav();
+  await loadRuntimeMode();
   await refresh();
+}
+
+async function loadRuntimeMode() {
+  const mode = await fetch('/api/mode').then((r) => r.json()).catch(() => null);
+  applyRuntimeMode(mode?.transcriptSource === 'websocket' ? 'websocket' : 'simulator', mode);
+}
+
+function applyRuntimeMode(source, mode = {}) {
+  state.transcriptSource = source === 'websocket' ? 'websocket' : 'simulator';
+  const isReal = state.transcriptSource === 'websocket';
+  state.entityId = isReal ? (mode?.realEntityId || ENTITY) : ENTITY;
+  document.body.dataset.transcriptSource = state.transcriptSource;
+  document.title = isReal ? 'Carry Lawyer Live Transcript' : 'Carry Lawyer Mode';
+  $('.rail-foot-title').textContent = isReal ? 'Lawyer Mode · Live' : 'Lawyer Mode';
+  $('.rail-foot-copy').textContent = isReal
+    ? 'Transcript input. Attorney approves. End meeting manually.'
+    : 'AI prepares. Attorney approves. No automatic filing or advice.';
+  $('#scenario-picker')?.toggleAttribute('hidden', isReal);
+  $('#reset-demo').textContent = isReal ? 'Start new live matter' : 'Reset matter';
+  $$('.launch-visit').forEach((b) => { b.textContent = isReal ? 'Begin meeting' : 'Begin next meeting'; });
 }
 
 function bindNav() {
   $$('.rail-link').forEach((b) => b.addEventListener('click', () => go(b.dataset.page)));
   $$('.launch-visit').forEach((b) => b.addEventListener('click', startMeeting));
   $$('.scenario-opt').forEach((b) => b.addEventListener('click', () => setScenario(b.dataset.scenario)));
+  $('#end-meeting')?.addEventListener('click', endMeeting);
   $('#approve-all')?.addEventListener('click', () => go('today'));
   $('#reset-demo')?.addEventListener('click', resetDemo);
 }
@@ -52,9 +78,9 @@ function syncScenarioButtons() {
 
 /* ---------------- LIVE MATTER RECORD ---------------- */
 async function refresh() {
-  const data = await fetch(`/api/context?entityId=${ENTITY}`).then((r) => r.json()).catch(() => ({ items: [], sessions: [] }));
+  const data = await fetch(`/api/context?entityId=${state.entityId}`).then((r) => r.json()).catch(() => ({ items: [], sessions: [] }));
   state.record = deriveRecord(data.items || [], data.sessions || []);
-  if (!state.running) {
+  if (!state.running && state.transcriptSource !== 'websocket') {
     state.scenario = state.record.meetings.length === 0 ? 'meeting1' : 'meeting2';
     syncScenarioButtons();
   }
@@ -151,16 +177,19 @@ function summarizeMeeting(sid, rec) {
 /* ---------------- TODAY ---------------- */
 function renderToday() {
   const rec = state.record || emptyRecord();
-  const scn = SCENARIOS[state.scenario];
+  const isReal = state.transcriptSource === 'websocket';
+  const scn = isReal ? { badge: 'Live transcript', reason: 'Live client conversation', agenda: ['Start the live meeting', 'Listen to the websocket transcript', 'End meeting for final memo'] } : SCENARIOS[state.scenario];
   const hasHistory = rec.meetings.length > 0;
 
   $('#brief-avatar').textContent = MATTER.initials;
   $('#brief-name').textContent = MATTER.clientLabel;
   $('#brief-meta').textContent = `${MATTER.matterNumber} \u00b7 ${MATTER.practice} \u00b7 09:30`;
   $('#brief-badge').textContent = scn.badge;
-  $('#brief-lead').textContent = hasHistory
-    ? 'Matter briefing, built from what Carry captured in earlier meetings.'
-    : 'New matter. No prior meetings on file yet.';
+  $('#brief-lead').textContent = isReal
+    ? 'Carry listens to the POC WebSocket stream. Press End meeting when the conversation is complete.'
+    : hasHistory
+      ? 'Matter briefing, built from what Carry captured in earlier meetings.'
+      : 'New matter. No prior meetings on file yet.';
 
   $('#brief-last').textContent = hasHistory ? rec.lastSummary : 'No prior meetings recorded for this matter.';
   setChips('#brief-deadlines', rec.deadlines.map((d) => d.due), 'None tracked yet');
@@ -239,16 +268,50 @@ function pushUpdate(text) {
 function renderMatter() {
   const rec = state.record || emptyRecord();
   const grid = $('#profile-grid');
-  $('#profile-risk').hidden = rec.deadlines.length === 0;
-  if (rec.deadlines.length) $('#profile-risk').textContent = `Deadline: ${rec.deadlines[0].due}`;
+  const selected = EXAMPLE_MATTERS.find((m) => m.id === state.selectedMatterId) || EXAMPLE_MATTERS[0];
+  $('#profile-risk').hidden = false;
+  $('#profile-risk').textContent = selected?.status || (rec.deadlines.length ? `Deadline: ${rec.deadlines[0].due}` : 'Portfolio');
 
+  grid.innerHTML = `
+    <section class="matter-workbench">
+      <div class="matter-list-panel">
+        <div class="section-head">
+          <h3>Open matters</h3>
+          <span class="muted-sm">${EXAMPLE_MATTERS.length} active</span>
+        </div>
+        <div class="matter-list">
+          ${EXAMPLE_MATTERS.map((matter) => matterListItem(matter, matter.id === selected?.id)).join('')}
+        </div>
+      </div>
+      <div class="matter-detail-panel">
+        ${matterDetail(selected)}
+      </div>
+    </section>
+    <section class="matter-live-memory">
+      <div class="section-head">
+        <h3>Captured from live meetings</h3>
+        <span class="muted-sm">${rec.meetings.length} meeting${rec.meetings.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="profile-grid live-memory-grid">
+        ${renderLiveMatterCards(rec)}
+      </div>
+    </section>`;
+
+  $$('.matter-list-item').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.selectedMatterId = button.dataset.matterId;
+      renderMatter();
+    });
+  });
+}
+
+function renderLiveMatterCards(rec) {
   if (!rec.meetings.length) {
-    grid.innerHTML = `<section class="pcard"><h3>No matter memory yet</h3>
+    return `<section class="pcard"><h3>No matter memory yet</h3>
       <div class="prow"><div class="prow-sub">Run a meeting. Parties, facts, issues, and deadlines will appear here as Carry captures them.</div></div></section>`;
-    return;
   }
 
-  grid.innerHTML = [
+  return [
     pcard('Deadlines', rec.deadlines.length
       ? rec.deadlines.map((d) => prow(d.due, `${d.rule || 'Rule basis requires verification'} · Captured in Meeting ${meetingN(d.sid)}`, `<span class="tag tag-danger">${esc(d.urgency || 'Review')}</span>`))
       : [emptyRow('No deadlines recorded')], 'deadline-card'),
@@ -265,6 +328,70 @@ function renderMatter() {
       ? rec.nextSteps.map((n) => prow(n.text, `${n.owner}${n.due ? ` · ${n.due}` : ''}`))
       : [emptyRow('No next steps recorded')], 'plan-card'),
   ].join('');
+}
+
+function matterListItem(matter, active) {
+  return `<button class="matter-list-item ${active ? 'active' : ''}" data-matter-id="${esc(matter.id)}">
+    <span class="matter-list-top">
+      <span class="matter-list-title">${esc(matter.title)}</span>
+      <span class="tag ${matter.priority === 'high' ? 'tag-danger' : 'tag'}">${esc(matter.status)}</span>
+    </span>
+    <span class="matter-list-meta">${esc(matter.matterNumber)} - ${esc(matter.practice)}</span>
+    <span class="matter-list-deadline">${esc(matter.nextDeadline)}</span>
+  </button>`;
+}
+
+function matterDetail(matter) {
+  if (!matter) return '<div class="matter-empty">No matters configured.</div>';
+  const urgent = matter.actions.filter((a) => a.status === 'urgent').length;
+  const waiting = matter.actions.filter((a) => a.status === 'waiting').length;
+  return `
+    <div class="matter-detail-head">
+      <div>
+        <p class="kicker">${esc(matter.matterNumber)} - ${esc(matter.stage)}</p>
+        <h2>${esc(matter.title)}</h2>
+        <p class="matter-detail-sub">${esc(matter.client)} - ${esc(matter.court)} - Owner: ${esc(matter.owner)}</p>
+      </div>
+      <span class="tag ${matter.priority === 'high' ? 'tag-danger' : 'tag-warn'}">${esc(matter.priority)} priority</span>
+    </div>
+    <p class="matter-summary">${esc(matter.summary)}</p>
+    <div class="matter-metrics">
+      <div><span>${matter.actions.length}</span><p>Open actions</p></div>
+      <div><span>${urgent}</span><p>Urgent</p></div>
+      <div><span>${waiting}</span><p>Waiting</p></div>
+      <div><span>${matter.documents.length}</span><p>Documents</p></div>
+    </div>
+    <div class="matter-detail-grid">
+      <section class="matter-section">
+        <div class="section-head"><h3>Action summary</h3><span class="muted-sm">Next work</span></div>
+        <div class="matter-actions">
+          ${matter.actions.map(actionRow).join('')}
+        </div>
+      </section>
+      <section class="matter-section">
+        <div class="section-head"><h3>Issues</h3><span class="muted-sm">Attorney review</span></div>
+        <ul class="matter-chip-list">${matter.issues.map((issue) => `<li>${esc(issue)}</li>`).join('')}</ul>
+      </section>
+      <section class="matter-section">
+        <div class="section-head"><h3>Key facts</h3><span class="muted-sm">Working file</span></div>
+        <ul class="matter-fact-list">${matter.facts.map((fact) => `<li>${esc(fact)}</li>`).join('')}</ul>
+      </section>
+      <section class="matter-section">
+        <div class="section-head"><h3>Documents</h3><span class="muted-sm">Requested</span></div>
+        <ul class="matter-doc-list">${matter.documents.map((doc) => `<li>${esc(doc)}</li>`).join('')}</ul>
+      </section>
+    </div>`;
+}
+
+function actionRow(action) {
+  const tag = action.status === 'urgent' ? 'tag-danger' : action.status === 'waiting' ? 'tag-warn' : 'tag-teal';
+  return `<div class="matter-action-row">
+    <div>
+      <span class="matter-action-label">${esc(action.label)}</span>
+      <span class="matter-action-meta">${esc(action.owner)} - ${esc(action.due)}</span>
+    </div>
+    <span class="tag ${tag}">${esc(action.status)}</span>
+  </div>`;
 }
 
 function pcard(title, rows, id) {
@@ -417,22 +544,31 @@ function showNode(id) {
 }
 
 /* ---------------- LIVE MEETING ---------------- */
-function startMeeting() {
+async function startMeeting() {
   if (state.running) return;
+  if (state.transcriptSource === 'websocket') await resetDemo({ stayOnToday: true });
   resetMeeting();
   go('visit');
   state.running = true;
-  $('#visit-scenario').textContent = state.scenario === 'meeting1' ? 'Meeting 1' : 'Meeting 2';
+  $('#visit-scenario').textContent = state.transcriptSource === 'websocket'
+    ? 'Live WebSocket'
+    : (state.scenario === 'meeting1' ? 'Meeting 1' : 'Meeting 2');
   $$('.launch-visit').forEach((b) => { b.disabled = true; b.textContent = 'Meeting in progress'; });
   $$('.scenario-opt').forEach((b) => { b.disabled = true; });
   $('#reset-demo') && ($('#reset-demo').disabled = true);
-  setLive('live', 'Listening');
+  $('#end-meeting').hidden = state.transcriptSource !== 'websocket';
+  $('#end-meeting').disabled = true;
+  setLive('live', state.transcriptSource === 'websocket' ? 'Connecting' : 'Listening');
 
-  const source = new EventSource(`/api/live?scenario=${state.scenario}`);
+  const source = new EventSource(`/api/live?scenario=${state.scenario}&source=${state.transcriptSource}`);
   state.source = source;
 
+  source.addEventListener('session', (e) => onSession(parse(e)));
   source.addEventListener('chunk', (e) => onChunk(parse(e)));
+  source.addEventListener('websocket_status', (e) => onWebsocketStatus(parse(e)));
+  source.addEventListener('websocket_complete', () => setLive('thinking', 'Drafting memo'));
   source.addEventListener('incremental_started', () => setLive('thinking', 'Understanding'));
+  source.addEventListener('incremental_queued', () => setLive('thinking', 'Still listening'));
   source.addEventListener('incremental', (e) => { onIncremental(parse(e).draft); setLive('live', 'Listening'); });
   source.addEventListener('final_started', () => setLive('thinking', 'Drafting memo'));
   source.addEventListener('final', (e) => onFinal(parse(e).output));
@@ -440,7 +576,7 @@ function startMeeting() {
   source.addEventListener('notion', (e) => onNotion(parse(e)));
   source.addEventListener('done', (e) => finishMeeting(source, parse(e)));
   source.addEventListener('error', (e) => {
-    if (e.data) addAction('Issue', parse(e).error || 'Stream error', 'tag-danger');
+    if (e.data) showQuietIssue('Carry could not complete this meeting automatically. Review the transcript and try ending again.');
     if (source.readyState === EventSource.CLOSED) finishMeeting(source, {});
   });
 }
@@ -456,8 +592,46 @@ function resetMeeting() {
   $('#live-issues').innerHTML = '<li class="live-empty">No issues spotted yet</li>';
   $('#live-missing').innerHTML = '<li class="live-empty">Memo looks complete so far</li>';
   $('#action-stack').innerHTML = '<p class="live-empty">Memo, calendar, and conflict-check drafts appear here as the meeting progresses.</p>';
+  $('#end-meeting').hidden = true;
+  $('#end-meeting').disabled = false;
   $('#review').hidden = true;
   $('#card-deadline').classList.remove('flag');
+}
+
+function onSession(data) {
+  state.currentSessionId = data?.sessionId || null;
+  if (data?.sourceMode === 'websocket') {
+    $('#end-meeting').hidden = false;
+    $('#end-meeting').disabled = false;
+  }
+}
+
+async function endMeeting() {
+  if (!state.running) return;
+  $('#end-meeting').disabled = true;
+  setLive('thinking', 'Ending meeting');
+  const suffix = state.currentSessionId ? `?sessionId=${encodeURIComponent(state.currentSessionId)}` : '';
+  const result = await fetch(`/api/end-live${suffix}`).then((r) => r.json()).catch((error) => ({ ok: false, error: error.message || String(error) }));
+  if (!result.ok) {
+    $('#end-meeting').disabled = false;
+    setLive('live', 'Still listening');
+    showQuietIssue('Could not end the active stream yet. Try again in a moment.');
+  }
+}
+
+function onWebsocketStatus(data) {
+  const status = data?.status || 'event';
+  if (status === 'connecting') {
+    setLive('thinking', 'Connecting');
+  } else if (status === 'connected') {
+    setLive('live', 'Listening');
+  } else if (status === 'conversation_started') {
+    setLive('live', 'Conversation started');
+  } else if (status === 'transcript_updated' && data.speakers?.length) {
+    setLive('live', `Listening: ${data.speakers.join(', ')}`);
+  } else if (status === 'error') {
+    setLive('live', 'Reconnecting');
+  }
 }
 
 function onChunk(c) {
@@ -465,9 +639,9 @@ function onChunk(c) {
   $('#convo-count').textContent = String(state.turns);
   const stream = $('#convo-stream');
   stream.querySelector('.convo-empty')?.remove();
-  const who = speakerRole(c.speaker);
+  const who = speakerRole(c);
   const turn = document.createElement('div');
-  turn.className = `turn ${who === 'client' ? 'patient' : 'doctor'}`;
+  turn.className = `turn ${who.role === 'client' ? 'patient' : 'doctor'}`;
 
   const redactions = c.redactions || [];
   const original = c.incomingText || c.sanitizedText || '';
@@ -485,16 +659,23 @@ function onChunk(c) {
        <div class="turn-redact">${redactions.length} item${redactions.length > 1 ? 's' : ''} redacted before processing</div>`
     : `<div class="turn-text">${esc(sanitized)}</div>`;
 
-  turn.innerHTML = `<span class="turn-who">${who === 'client' ? 'Client' : 'Attorney'}</span>${body}`;
+  turn.innerHTML = `<span class="turn-who">${esc(who.label)}</span>${body}`;
   stream.appendChild(turn);
   stream.scrollTop = stream.scrollHeight;
 }
 
-function speakerRole(speaker) {
+function speakerRole(chunk) {
+  const speaker = typeof chunk === 'string' ? chunk : chunk?.speaker;
+  const sourceMode = typeof chunk === 'object' ? chunk?.sourceMode : null;
   const s = String(speaker || '').toLowerCase();
-  if (s.includes('client') || /\b(person\s*2|speaker\s*2|p2|s2)\b/.test(s)) return 'client';
-  if (s.includes('attorney') || s.includes('lawyer') || /\b(person\s*1|speaker\s*1|p1|s1)\b/.test(s)) return 'attorney';
-  return 'attorney';
+  if (sourceMode === 'websocket') {
+    const m = s.match(/(?:speaker|spk|person)[_\s-]*(\d+)/);
+    const n = m ? Number(m[1]) : null;
+    return { role: n != null && n % 2 === 0 ? 'client' : 'attorney', label: m ? `Speaker ${n}` : (speaker || 'Speaker') };
+  }
+  if (s.includes('client') || /\b(person\s*2|speaker\s*2|p2|s2)\b/.test(s)) return { role: 'client', label: 'Client' };
+  if (s.includes('attorney') || s.includes('lawyer') || /\b(person\s*1|speaker\s*1|p1|s1)\b/.test(s)) return { role: 'attorney', label: 'Attorney' };
+  return { role: 'attorney', label: speaker || 'Attorney' };
 }
 
 function highlightOriginals(text, redactions) {
@@ -626,6 +807,16 @@ function addAction(title, body, tag = 'tag') {
   stack.prepend(card);
 }
 
+function showQuietIssue(message) {
+  setLive('thinking', 'Needs review');
+  const progress = $('#memo-progress');
+  if (progress) {
+    progress.textContent = 'Needs review';
+    progress.className = 'tag tag-warn';
+  }
+  pushUpdate(message);
+}
+
 function onFinal(output) {
   setLive('thinking', 'Preparing review');
   const memo = output.matter_memo || {};
@@ -677,8 +868,10 @@ async function finishMeeting(source, payload) {
   state.running = false;
   state.newestSession = payload?.sessionId || null;
   setLive('done', 'Meeting complete');
-  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = 'Begin next meeting'; });
+  $$('.launch-visit').forEach((b) => { b.disabled = false; b.textContent = state.transcriptSource === 'websocket' ? 'Begin meeting' : 'Begin next meeting'; });
   $$('.scenario-opt').forEach((b) => { b.disabled = false; });
+  $('#end-meeting').hidden = true;
+  $('#end-meeting').disabled = false;
   $('#reset-demo') && ($('#reset-demo').disabled = false);
   await refresh();
   pushUpdate('Matter memory updated from the latest meeting');
@@ -690,13 +883,13 @@ function setLive(stateName, label) {
   $('#live-label').textContent = label;
 }
 
-async function resetDemo() {
+async function resetDemo({ stayOnToday = false } = {}) {
   if (state.running) return;
-  await fetch(`/api/reset?entityId=${ENTITY}`).catch(() => {});
+  await fetch(`/api/reset?entityId=${state.entityId}`).catch(() => {});
   state.newestSession = null;
   $('#update-list').innerHTML = '<li class="update-empty">Updates from meetings appear here as Carry understands them.</li>';
   await refresh();
-  go('today');
+  if (!stayOnToday) go('today');
 }
 
 /* ---------------- utils ---------------- */
